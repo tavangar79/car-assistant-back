@@ -1,0 +1,23 @@
+// Prisma ORM 6.19 is used because Prisma 7 has no MongoDB connector
+// and Prisma 8 (Mongo-native) is still a release candidate.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Vehicle {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  make      String
+  model     String
+  year      Int
+  mileageKm Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("vehicles")
+}

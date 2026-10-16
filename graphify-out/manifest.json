@@ -1,0 +1,122 @@
+{
+  ".claude/settings.json": {
+    "mtime": 1792136308.864642,
+    "ast_hash": "17cb38df124334bde6c4ad81cc879ab3",
+    "semantic_hash": "17cb38df124334bde6c4ad81cc879ab3"
+  },
+  "eslint.config.js": {
+    "mtime": 1792135387.9517767,
+    "ast_hash": "51f95a4698d484eedfcbca24cf157952",
+    "semantic_hash": "51f95a4698d484eedfcbca24cf157952"
+  },
+  "package.json": {
+    "mtime": 1792135338.2498393,
+    "ast_hash": "5784b38b7daad3c37be626c0836acd14",
+    "semantic_hash": "5784b38b7daad3c37be626c0836acd14"
+  },
+  "src/app.ts": {
+    "mtime": 1792135387.0051508,
+    "ast_hash": "90b177d2a658884b1ab7737d6fe0ed6a",
+    "semantic_hash": "90b177d2a658884b1ab7737d6fe0ed6a"
+  },
+  "src/config/env.ts": {
+    "mtime": 1792135385.0421965,
+    "ast_hash": "d5c7bb9d0ce9b2448959e9169a1539c2",
+    "semantic_hash": "d5c7bb9d0ce9b2448959e9169a1539c2"
+  },
+  "src/lib/prisma.ts": {
+    "mtime": 1792135385.2674558,
+    "ast_hash": "3d7e027783a79ffe1875bc3250b4324a",
+    "semantic_hash": "3d7e027783a79ffe1875bc3250b4324a"
+  },
+  "src/modules/health/health.routes.ts": {
+    "mtime": 1792135386.044972,
+    "ast_hash": "3669c0c037d53eba5f0ce9fce4bcb105",
+    "semantic_hash": "3669c0c037d53eba5f0ce9fce4bcb105"
+  },
+  "src/modules/vehicles/vehicle.repository.ts": {
+    "mtime": 1792135386.4503214,
+    "ast_hash": "3e18760363ecdd232c46637174e044bb",
+    "semantic_hash": "3e18760363ecdd232c46637174e044bb"
+  },
+  "src/modules/vehicles/vehicle.routes.test.ts": {
+    "mtime": 1792135387.7713983,
+    "ast_hash": "9084e431e42c293d85c0a6e00c4f0b40",
+    "semantic_hash": "9084e431e42c293d85c0a6e00c4f0b40"
+  },
+  "src/modules/vehicles/vehicle.routes.ts": {
+    "mtime": 1792135386.8100188,
+    "ast_hash": "4c8cc6b80b724585b264c9bee9ec7c22",
+    "semantic_hash": "4c8cc6b80b724585b264c9bee9ec7c22"
+  },
+  "src/modules/vehicles/vehicle.service.test.ts": {
+    "mtime": 1792135387.5844426,
+    "ast_hash": "c93cb5d0aad7154997e37147dc40f138",
+    "semantic_hash": "c93cb5d0aad7154997e37147dc40f138"
+  },
+  "src/modules/vehicles/vehicle.service.ts": {
+    "mtime": 1792135386.6294694,
+    "ast_hash": "855734e9ee26141f9c197b4302ac874b",
+    "semantic_hash": "855734e9ee26141f9c197b4302ac874b"
+  },
+  "src/modules/vehicles/vehicle.types.ts": {
+    "mtime": 1792135386.2529173,
+    "ast_hash": "b2f35b49008323749313711bcf55327c",
+    "semantic_hash": "b2f35b49008323749313711bcf55327c"
+  },
+  "src/server.ts": {
+    "mtime": 1792135387.1939788,
+    "ast_hash": "aef527c258f092281f1bcf0f559e3718",
+    "semantic_hash": "aef527c258f092281f1bcf0f559e3718"
+  },
+  "src/shared/error-handler.ts": {
+    "mtime": 1792135385.6466434,
+    "ast_hash": "07af1f8ba83a70682811b374da75633c",
+    "semantic_hash": "07af1f8ba83a70682811b374da75633c"
+  },
+  "src/shared/errors.ts": {
+    "mtime": 1792135385.461661,
+    "ast_hash": "e2e04e191014e95ecfd2ea809625e7d8",
+    "semantic_hash": "e2e04e191014e95ecfd2ea809625e7d8"
+  },
+  "src/shared/validate.ts": {
+    "mtime": 1792135385.8643026,
+    "ast_hash": "31743c514a77b9b932afd57e3b7d7fa4",
+    "semantic_hash": "31743c514a77b9b932afd57e3b7d7fa4"
+  },
+  "src/test/in-memory-vehicle.repository.ts": {
+    "mtime": 1792135387.3982875,
+    "ast_hash": "510440ceb2787ffdbdebb603ecfd09c1",
+    "semantic_hash": "510440ceb2787ffdbdebb603ecfd09c1"
+  },
+  "tsconfig.build.json": {
+    "mtime": 1792135338.6036127,
+    "ast_hash": "e3a258b701ed875fc3939221c177cc9c",
+    "semantic_hash": "e3a258b701ed875fc3939221c177cc9c"
+  },
+  "tsconfig.json": {
+    "mtime": 1792135338.339169,
+    "ast_hash": "64157ae544eb8c66d1fda04a86916a38",
+    "semantic_hash": "64157ae544eb8c66d1fda04a86916a38"
+  },
+  ".claude/agents/senior-backend-engineer.md": {
+    "mtime": 1792136272.708756,
+    "ast_hash": "c22e302629a90d2f8e1af3946fd68264",
+    "semantic_hash": "c22e302629a90d2f8e1af3946fd68264"
+  },
+  ".claude/skills/backend-senior/SKILL.md": {
+    "mtime": 1792135727.9341857,
+    "ast_hash": "7ed2c7f5a315e31d195285f84624703b",
+    "semantic_hash": "7ed2c7f5a315e31d195285f84624703b"
+  },
+  "CLAUDE.md": {
+    "mtime": 1792136346.7199447,
+    "ast_hash": "ee87285617e611792508f09dca91d1f3",
+    "semantic_hash": "ee87285617e611792508f09dca91d1f3"
+  },
+  "docker-compose.yml": {
+    "mtime": 1792135338.9933984,
+    "ast_hash": "c8c8183b4c17968b5abdee1b3e94a47b",
+    "semantic_hash": "c8c8183b4c17968b5abdee1b3e94a47b"
+  }
+}

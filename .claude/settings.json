@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(npm test:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run format:*)",
+      "Bash(npm run db:generate:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(npx prisma validate:*)",
+      "Bash(npx prisma format:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npx tsc:*)",
+      "Bash(graphify:*)"
+    ],
+    "deny": [
+      "Read(./.env)"
+    ]
+  },
+  "enabledPlugins": {
+    "typescript-lsp@claude-plugins-official": true,
+    "mongodb@claude-plugins-official": true
+  },
+  "env": {
+    "MDB_MCP_CONNECTION_STRING": "mongodb://localhost:27017/car_assistant?replicaSet=rs0&directConnection=true",
+    "MDB_MCP_READ_ONLY": "true"
+  }
+}
