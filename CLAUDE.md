@@ -1,5 +1,10 @@
 # car-assistant-back — Car Assistant API
 
+## Communication style
+- Keep answers short and simple. Answer first, with no preamble or recap.
+- Elaborate only when asked.
+- Always flag risky or destructive actions in one line.
+
 Express 5 + TypeScript (ESM) + Prisma 6.19 + MongoDB. Tests use Vitest + Supertest.
 Repo: https://github.com/tavangar79/car-assistant-back.git. It's a standalone project, used as a submodule
 by the car-assistant manager repo, whose CTO sends tasks with an API contract.
