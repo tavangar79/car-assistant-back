@@ -1,11 +1,14 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express';
-import { AppError } from './errors.ts';
+import { AppError, TooManyRequestsError } from './errors.ts';
 
 export const notFoundHandler: RequestHandler = (_req, res) => {
   res.status(404).json({ error: { message: 'Route not found' } });
 };
 
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+  if (err instanceof TooManyRequestsError) {
+    res.set('Retry-After', String(err.retryAfterSeconds));
+  }
   if (err instanceof AppError) {
     res.status(err.statusCode).json({ error: { message: err.message, details: err.details } });
     return;

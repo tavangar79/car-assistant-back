@@ -1,13 +1,13 @@
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../app.ts';
-import { InMemoryVehicleRepository } from '../../test/in-memory-vehicle.repository.ts';
+import { createTestDependencies } from '../../test/test-dependencies.ts';
 
 describe('/api/vehicles', () => {
   let app: ReturnType<typeof createApp>;
 
   beforeEach(() => {
-    app = createApp({ vehicleRepository: new InMemoryVehicleRepository() });
+    app = createApp(createTestDependencies());
   });
 
   it('POST creates a vehicle and GET returns it', async () => {
@@ -16,7 +16,12 @@ describe('/api/vehicles', () => {
       .send({ make: 'Toyota', model: 'Corolla', year: 2020 })
       .expect(201);
 
-    expect(created.body).toMatchObject({ make: 'Toyota', model: 'Corolla', year: 2020, mileageKm: 0 });
+    expect(created.body).toMatchObject({
+      make: 'Toyota',
+      model: 'Corolla',
+      year: 2020,
+      mileageKm: 0,
+    });
 
     const fetched = await request(app).get(`/api/vehicles/${created.body.id}`).expect(200);
     expect(fetched.body.id).toBe(created.body.id);

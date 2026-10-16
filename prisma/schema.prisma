@@ -21,3 +21,39 @@ model Vehicle {
 
   @@map("vehicles")
 }
+
+model User {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  phone     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+// At most one pending code per phone; a new request replaces it.
+// codeHash = HMAC-SHA256(server secret, phone + code).
+// Prisma 6 can't declare a Mongo TTL index, so expired codes are deleted on each OTP request.
+model OtpCode {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  phone     String   @unique
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("otp_codes")
+}
+
+// One row per code sent; drives the resend cooldown and the per-phone cap.
+// Rows older than OTP_REQUEST_WINDOW_SECONDS are deleted on each OTP request.
+model OtpRequest {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  phone     String
+  createdAt DateTime
+
+  @@index([phone, createdAt])
+  @@index([createdAt])
+  @@map("otp_requests")
+}

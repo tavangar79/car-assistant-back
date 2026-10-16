@@ -22,3 +22,20 @@ export class ValidationError extends AppError {
     this.name = 'ValidationError';
   }
 }
+
+export class UnauthorizedError extends AppError {
+  constructor(message = 'Unauthorized') {
+    super(401, message);
+    this.name = 'UnauthorizedError';
+  }
+}
+
+export class TooManyRequestsError extends AppError {
+  constructor(
+    public readonly retryAfterSeconds: number,
+    extraDetails: Record<string, unknown> = {},
+  ) {
+    super(429, 'Too many requests', { retryAfterSeconds, ...extraDetails });
+    this.name = 'TooManyRequestsError';
+  }
+}
