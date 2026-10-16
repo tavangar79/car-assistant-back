@@ -14,10 +14,22 @@
       "Bash(npx prisma format:*)",
       "Bash(npx vitest:*)",
       "Bash(npx tsc:*)",
-      "Bash(graphify:*)"
+      "Bash(graphify:*)",
+      "Bash(npm install:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(npx prettier:*)",
+      "Bash(npx eslint:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
     ],
     "deny": [
       "Read(./.env)"
+    ],
+    "defaultMode": "acceptEdits",
+    "ask": [
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ]
   },
   "enabledPlugins": {
