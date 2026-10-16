@@ -11,7 +11,7 @@ by the car-assistant manager repo, whose CTO sends tasks with an API contract.
 - **Use graphify first:** `graphify query "<question>"`. If `graphify-out/` is missing, run `/graphify .`.
   After meaningful changes, refresh it with `/graphify . --update`.
 - Load the `backend-senior` skill for the full conventions and recipes.
-- The `senior-backend-engineer` agent (`.claude/agents/`) owns backend work.
+- **John** (`john` agent, `.claude/agents/john.md`) owns backend work.
 - Tooling in this repo: the `typescript-lsp` plugin, and the `mongodb` plugin (read-only, local DB).
   Use Context7 for library docs.
 
