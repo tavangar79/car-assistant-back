@@ -22,14 +22,15 @@ describe('loadEnv', () => {
       JWT_EXPIRES_IN: '30d',
       SMS_PROVIDER: 'console',
       OTP_LENGTH: 5,
-      OTP_TTL_SECONDS: 120,
-      OTP_RESEND_COOLDOWN_SECONDS: 60,
+      OTP_TTL_SECONDS: 300,
+      OTP_RESEND_COOLDOWN_SECONDS: 300,
       OTP_MAX_ATTEMPTS: 5,
       OTP_MAX_REQUESTS_PER_WINDOW: 5,
       OTP_REQUEST_WINDOW_SECONDS: 3600,
       AUTH_IP_RATE_LIMIT_MAX: 30,
       AUTH_IP_RATE_LIMIT_WINDOW_SECONDS: 900,
       TRUST_PROXY_HOPS: 0,
+      CORS_ORIGINS: [],
     });
     expect(env.OTP_FIXED_CODE).toBeUndefined();
   });
@@ -88,6 +89,22 @@ describe('loadEnv', () => {
 
   it('boots in production with kavenegar and no fixed code', () => {
     expect(loadEnv(production)).toMatchObject({ NODE_ENV: 'production' });
+  });
+
+  describe('CORS_ORIGINS', () => {
+    it('parses a comma-separated list of origins', () => {
+      expect(
+        loadEnv({ ...base, CORS_ORIGINS: 'https://app.example.com, http://localhost:8080' })
+          .CORS_ORIGINS,
+      ).toEqual(['https://app.example.com', 'http://localhost:8080']);
+    });
+
+    it.each(['app.example.com', 'https://app.example.com/', 'https://app.example.com/path'])(
+      'rejects %s',
+      (origin) => {
+        expect(() => loadEnv({ ...base, CORS_ORIGINS: origin })).toThrow(/CORS_ORIGINS/);
+      },
+    );
   });
 
   it('rejects a request window shorter than the resend cooldown', () => {

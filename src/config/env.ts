@@ -4,6 +4,14 @@ import { z } from 'zod';
 /** The value shipped in `.env.example`. Booting with it would make every JWT forgeable. */
 export const JWT_SECRET_PLACEHOLDER = 'change-me-to-a-random-string-of-32-plus-chars';
 
+function isOrigin(value: string): boolean {
+  try {
+    return new URL(value).origin === value;
+  } catch {
+    return false;
+  }
+}
+
 const emptyAsUndefined = (value: unknown) => (value === '' ? undefined : value);
 
 const envSchema = z
@@ -13,6 +21,27 @@ const envSchema = z
     DATABASE_URL: z.string().min(1),
     // Number of reverse proxies in front of the API; needed for the per-IP rate limit to see the client IP.
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
+    // Comma-separated browser origins allowed by CORS, e.g. https://app.example.com.
+    // Outside production any http://localhost:<port> / http://127.0.0.1:<port> is allowed too.
+    CORS_ORIGINS: z
+      .string()
+      .default('')
+      .transform((value) =>
+        value
+          .split(',')
+          .map((origin) => origin.trim())
+          .filter(Boolean),
+      )
+      .pipe(
+        z.array(
+          z
+            .string()
+            .refine(
+              isOrigin,
+              'Each CORS_ORIGINS entry must be an origin like https://app.example.com',
+            ),
+        ),
+      ),
 
     JWT_SECRET: z
       .string()
@@ -36,8 +65,8 @@ const envSchema = z
       emptyAsUndefined,
       z.string().regex(/^\d+$/, 'OTP_FIXED_CODE must be digits').optional(),
     ),
-    OTP_TTL_SECONDS: z.coerce.number().int().positive().default(120),
-    OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().min(0).default(60),
+    OTP_TTL_SECONDS: z.coerce.number().int().positive().default(300),
+    OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().min(0).default(300),
     OTP_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
     OTP_MAX_REQUESTS_PER_WINDOW: z.coerce.number().int().positive().default(5),
     OTP_REQUEST_WINDOW_SECONDS: z.coerce.number().int().positive().default(3600),

@@ -28,6 +28,7 @@ export function createTestDependencies(overrides: Partial<AppDependencies> = {})
       requestWindowSeconds: 3600,
     },
     authIpRateLimit: { max: 1000, windowSeconds: 900 },
+    cors: { origins: [], allowLocalhost: true },
     ...overrides,
   };
 }

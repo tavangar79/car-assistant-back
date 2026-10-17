@@ -1,4 +1,5 @@
 import express, { type Express } from 'express';
+import { cors, type CorsSettings } from './shared/cors.ts';
 import { errorHandler, notFoundHandler } from './shared/error-handler.ts';
 import { ipRateLimit, type IpRateLimitSettings } from './shared/ip-rate-limit.ts';
 import { healthRoutes } from './modules/health/health.routes.ts';
@@ -27,10 +28,12 @@ export interface AppDependencies {
   now: () => Date;
   otpSettings: OtpSettings;
   authIpRateLimit: IpRateLimitSettings;
+  cors: CorsSettings;
 }
 
 export function createApp(deps: AppDependencies): Express {
   const app = express();
+  app.use(cors(deps.cors));
   app.use(express.json());
 
   // Reusable guard for protected routes: router.get('/x', authenticate, handler).

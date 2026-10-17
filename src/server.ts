@@ -34,6 +34,11 @@ const app = createApp({
     max: env.AUTH_IP_RATE_LIMIT_MAX,
     windowSeconds: env.AUTH_IP_RATE_LIMIT_WINDOW_SECONDS,
   },
+  cors: {
+    origins: env.CORS_ORIGINS,
+    // Flutter web picks a random localhost port in dev; production allows only CORS_ORIGINS.
+    allowLocalhost: env.NODE_ENV !== 'production',
+  },
 });
 // Behind N reverse proxies, req.ip (used by the per-IP rate limit) must come from X-Forwarded-For.
 app.set('trust proxy', env.TRUST_PROXY_HOPS);
