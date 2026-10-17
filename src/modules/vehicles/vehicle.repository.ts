@@ -1,32 +1,43 @@
 import type { PrismaClient } from '@prisma/client';
-import type { CreateVehicleInput, UpdateVehicleInput, Vehicle } from './vehicle.types.ts';
+import type { NewVehicle, VehicleChanges, VehicleRecord } from './vehicle.types.ts';
 
 // The service depends on this interface, so tests can swap in an in-memory version.
 export interface VehicleRepository {
-  findAll(): Promise<Vehicle[]>;
-  findById(id: string): Promise<Vehicle | null>;
-  create(input: CreateVehicleInput): Promise<Vehicle>;
-  update(id: string, input: UpdateVehicleInput): Promise<Vehicle>;
+  /** All of the user's vehicles, in no particular order. */
+  listByUser(userId: string): Promise<VehicleRecord[]>;
+  /** The vehicle only if it belongs to the user. */
+  findForUser(id: string, userId: string): Promise<VehicleRecord | null>;
+  create(vehicle: NewVehicle): Promise<VehicleRecord>;
+  update(id: string, changes: VehicleChanges): Promise<VehicleRecord>;
+  /** Clears `isDefault` on every vehicle of the user. */
+  clearDefault(userId: string): Promise<void>;
   delete(id: string): Promise<void>;
 }
 
 export class PrismaVehicleRepository implements VehicleRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  findAll(): Promise<Vehicle[]> {
-    return this.prisma.vehicle.findMany({ orderBy: { createdAt: 'desc' } });
+  listByUser(userId: string): Promise<VehicleRecord[]> {
+    return this.prisma.vehicle.findMany({ where: { userId } });
   }
 
-  findById(id: string): Promise<Vehicle | null> {
-    return this.prisma.vehicle.findUnique({ where: { id } });
+  findForUser(id: string, userId: string): Promise<VehicleRecord | null> {
+    return this.prisma.vehicle.findFirst({ where: { id, userId } });
   }
 
-  create(input: CreateVehicleInput): Promise<Vehicle> {
-    return this.prisma.vehicle.create({ data: input });
+  create(vehicle: NewVehicle): Promise<VehicleRecord> {
+    return this.prisma.vehicle.create({ data: vehicle });
   }
 
-  update(id: string, input: UpdateVehicleInput): Promise<Vehicle> {
-    return this.prisma.vehicle.update({ where: { id }, data: input });
+  update(id: string, changes: VehicleChanges): Promise<VehicleRecord> {
+    return this.prisma.vehicle.update({ where: { id }, data: changes });
+  }
+
+  async clearDefault(userId: string): Promise<void> {
+    await this.prisma.vehicle.updateMany({
+      where: { userId, isDefault: true },
+      data: { isDefault: false },
+    });
   }
 
   async delete(id: string): Promise<void> {

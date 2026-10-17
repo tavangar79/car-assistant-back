@@ -1,19 +1,27 @@
 import { createApp } from './app.ts';
 import { loadEnv } from './config/env.ts';
 import { createPrismaClient } from './lib/prisma.ts';
+import { PrismaAvatarRepository } from './modules/auth/avatar.repository.ts';
+import { AVATAR_MAX_BYTES } from './modules/auth/avatar-upload.ts';
 import { createCodeGenerator, createOtpHasher } from './modules/auth/otp-code.ts';
 import { PrismaOtpRepository } from './modules/auth/otp.repository.ts';
 import { createSmsSender } from './modules/auth/sms-sender.ts';
 import { TokenService } from './modules/auth/token.service.ts';
 import { PrismaUserRepository } from './modules/auth/user.repository.ts';
+import { PrismaVehiclePhotoRepository } from './modules/vehicles/vehicle-photo.repository.ts';
 import { PrismaVehicleRepository } from './modules/vehicles/vehicle.repository.ts';
+import { VEHICLE_PHOTO_MAX_BYTES } from './modules/vehicles/vehicle.routes.ts';
 
 const env = loadEnv();
 const prisma = createPrismaClient();
 
 const app = createApp({
   vehicleRepository: new PrismaVehicleRepository(prisma),
+  vehiclePhotoRepository: new PrismaVehiclePhotoRepository(prisma),
+  vehiclePhotoMaxBytes: VEHICLE_PHOTO_MAX_BYTES,
   userRepository: new PrismaUserRepository(prisma),
+  avatarRepository: new PrismaAvatarRepository(prisma),
+  avatarMaxBytes: AVATAR_MAX_BYTES,
   otpRepository: new PrismaOtpRepository(prisma),
   smsSender: createSmsSender(env),
   tokenService: new TokenService(env.JWT_SECRET, env.JWT_EXPIRES_IN),
@@ -29,6 +37,7 @@ const app = createApp({
     maxAttempts: env.OTP_MAX_ATTEMPTS,
     maxRequestsPerWindow: env.OTP_MAX_REQUESTS_PER_WINDOW,
     requestWindowSeconds: env.OTP_REQUEST_WINDOW_SECONDS,
+    rateLimitEnabled: env.OTP_RATE_LIMIT_ENABLED,
   },
   authIpRateLimit: {
     max: env.AUTH_IP_RATE_LIMIT_MAX,

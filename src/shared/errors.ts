@@ -39,3 +39,10 @@ export class TooManyRequestsError extends AppError {
     this.name = 'TooManyRequestsError';
   }
 }
+
+export class ConflictError extends AppError {
+  constructor(message: string) {
+    super(409, message);
+    this.name = 'ConflictError';
+  }
+}

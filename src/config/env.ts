@@ -65,6 +65,11 @@ const envSchema = z
       emptyAsUndefined,
       z.string().regex(/^\d+$/, 'OTP_FIXED_CODE must be digits').optional(),
     ),
+    // Set to false for local dev only: turns off the OTP cooldown, the per-phone cap and the per-IP limit.
+    OTP_RATE_LIMIT_ENABLED: z
+      .enum(['true', 'false'], { message: 'OTP_RATE_LIMIT_ENABLED must be true or false' })
+      .default('true')
+      .transform((value) => value === 'true'),
     OTP_TTL_SECONDS: z.coerce.number().int().positive().default(300),
     OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().min(0).default(300),
     OTP_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),

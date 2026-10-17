@@ -37,6 +37,11 @@ export class InMemoryOtpRepository implements OtpRepository {
       .sort((a, b) => a.getTime() - b.getTime());
   }
 
+  async clearRequests(phone: string): Promise<void> {
+    const kept = this.requests.filter((request) => request.phone !== phone);
+    this.requests.splice(0, this.requests.length, ...kept);
+  }
+
   async deleteExpired(now: Date, requestsUpTo: Date): Promise<void> {
     for (const [phone, otp] of this.codes) {
       if (otp.expiresAt <= now) this.codes.delete(phone);

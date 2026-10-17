@@ -17,6 +17,8 @@ export interface OtpRepository {
   recordRequest(phone: string, at: Date): Promise<void>;
   /** Times of this phone's requests after `since`, oldest first. */
   listRequestTimes(phone: string, since: Date): Promise<Date[]>;
+  /** Forgets this phone's request log, so its cooldown and per-phone cap start fresh. */
+  clearRequests(phone: string): Promise<void>;
   /** Cleanup for all phones: codes expired by `now`, and request logs at or before `requestsUpTo`. */
   deleteExpired(now: Date, requestsUpTo: Date): Promise<void>;
 }
@@ -57,6 +59,10 @@ export class PrismaOtpRepository implements OtpRepository {
       select: { createdAt: true },
     });
     return requests.map((request) => request.createdAt);
+  }
+
+  async clearRequests(phone: string): Promise<void> {
+    await this.prisma.otpRequest.deleteMany({ where: { phone } });
   }
 
   async deleteExpired(now: Date, requestsUpTo: Date): Promise<void> {

@@ -1,25 +1,28 @@
 import { randomBytes } from 'node:crypto';
 import type { VehicleRepository } from '../modules/vehicles/vehicle.repository.ts';
 import type {
-  CreateVehicleInput,
-  UpdateVehicleInput,
-  Vehicle,
+  NewVehicle,
+  VehicleChanges,
+  VehicleRecord,
 } from '../modules/vehicles/vehicle.types.ts';
 
 export class InMemoryVehicleRepository implements VehicleRepository {
-  private readonly vehicles = new Map<string, Vehicle>();
+  readonly vehicles = new Map<string, VehicleRecord>();
+  /** Each create is 1 ms later than the previous one, so "newest" is deterministic. */
+  private clock = Date.UTC(2026, 0, 1);
 
-  async findAll(): Promise<Vehicle[]> {
-    return [...this.vehicles.values()];
+  async listByUser(userId: string): Promise<VehicleRecord[]> {
+    return [...this.vehicles.values()].filter((vehicle) => vehicle.userId === userId);
   }
 
-  async findById(id: string): Promise<Vehicle | null> {
-    return this.vehicles.get(id) ?? null;
+  async findForUser(id: string, userId: string): Promise<VehicleRecord | null> {
+    const vehicle = this.vehicles.get(id);
+    return vehicle?.userId === userId ? vehicle : null;
   }
 
-  async create(input: CreateVehicleInput): Promise<Vehicle> {
-    const now = new Date();
-    const vehicle: Vehicle = {
+  async create(input: NewVehicle): Promise<VehicleRecord> {
+    const now = new Date(this.clock++);
+    const vehicle: VehicleRecord = {
       id: randomBytes(12).toString('hex'),
       ...input,
       createdAt: now,
@@ -29,12 +32,22 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     return vehicle;
   }
 
-  async update(id: string, input: UpdateVehicleInput): Promise<Vehicle> {
+  async update(id: string, changes: VehicleChanges): Promise<VehicleRecord> {
     const existing = this.vehicles.get(id);
     if (!existing) throw new Error(`Vehicle ${id} not found`);
-    const updated: Vehicle = { ...existing, ...input, updatedAt: new Date() };
+    const defined = Object.fromEntries(
+      Object.entries(changes).filter(([, value]) => value !== undefined),
+    );
+    const updated: VehicleRecord = { ...existing, ...defined, updatedAt: new Date(this.clock++) };
     this.vehicles.set(id, updated);
     return updated;
+  }
+
+  async clearDefault(userId: string): Promise<void> {
+    for (const vehicle of this.vehicles.values()) {
+      if (vehicle.userId === userId)
+        this.vehicles.set(vehicle.id, { ...vehicle, isDefault: false });
+    }
   }
 
   async delete(id: string): Promise<void> {

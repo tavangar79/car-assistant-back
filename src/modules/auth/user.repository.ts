@@ -1,10 +1,12 @@
 import type { PrismaClient } from '@prisma/client';
-import type { User } from './auth.types.ts';
+import type { UpdateProfileInput, User } from './auth.types.ts';
 
 export interface UserRepository {
   findById(id: string): Promise<User | null>;
   findByPhone(phone: string): Promise<User | null>;
   create(phone: string): Promise<User>;
+  /** Only call for an existing user. */
+  updateProfile(id: string, profile: UpdateProfileInput): Promise<User>;
 }
 
 export class PrismaUserRepository implements UserRepository {
@@ -20,5 +22,9 @@ export class PrismaUserRepository implements UserRepository {
 
   create(phone: string): Promise<User> {
     return this.prisma.user.create({ data: { phone } });
+  }
+
+  updateProfile(id: string, profile: UpdateProfileInput): Promise<User> {
+    return this.prisma.user.update({ where: { id }, data: profile });
   }
 }

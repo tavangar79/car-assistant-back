@@ -1,11 +1,21 @@
-import { TooManyRequestsError, UnauthorizedError } from '../../shared/errors.ts';
-import type {
-  OtpSettings,
-  PublicUser,
-  RequestOtpResult,
-  User,
-  VerifyOtpResult,
+import {
+  NotFoundError,
+  TooManyRequestsError,
+  UnauthorizedError,
+  ValidationError,
+} from '../../shared/errors.ts';
+import {
+  formatIsoDate,
+  type UserAvatar,
+  type OtpSettings,
+  type PublicUser,
+  type RequestOtpResult,
+  type UpdateProfileInput,
+  type User,
+  type VerifyOtpResult,
 } from './auth.types.ts';
+import type { AvatarRepository } from './avatar.repository.ts';
+import { detectImageType } from '../../shared/image-type.ts';
 import type { OtpRepository } from './otp.repository.ts';
 import { otpHashesMatch, type CodeGenerator, type OtpHasher } from './otp-code.ts';
 import type { SmsSender } from './sms-sender.ts';
@@ -14,6 +24,7 @@ import type { UserRepository } from './user.repository.ts';
 
 export interface AuthServiceDeps {
   users: UserRepository;
+  avatars: AvatarRepository;
   otps: OtpRepository;
   sms: SmsSender;
   tokens: TokenService;
@@ -25,9 +36,19 @@ export interface AuthServiceDeps {
 
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 const INVALID_CODE = 'Invalid or expired code';
+const AVATAR_PATH = '/api/auth/me/avatar';
 
-function toPublicUser(user: User): PublicUser {
-  return { id: user.id, phone: user.phone, createdAt: user.createdAt };
+function toPublicUser(user: User, avatarUpdatedAt: Date | null): PublicUser {
+  return {
+    id: user.id,
+    phone: user.phone,
+    createdAt: user.createdAt,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    birthDate: user.birthDate ? formatIsoDate(user.birthDate) : null,
+    isProfileComplete: Boolean(user.firstName && user.lastName && user.birthDate),
+    avatarUrl: avatarUpdatedAt ? `${AVATAR_PATH}?v=${avatarUpdatedAt.getTime()}` : null,
+  };
 }
 
 /** Phone + OTP sign-in. The first successful verify registers the user. */
@@ -77,15 +98,21 @@ export class AuthService {
     if (!(await otps.consume(phone, otp.codeHash))) {
       throw new UnauthorizedError(INVALID_CODE); // Already used by a concurrent request.
     }
+    await otps.clearRequests(phone); // Signed in: a later sign-in must not wait out the old cooldown.
 
     const existing = await users.findByPhone(phone);
     const user = existing ?? (await users.create(phone));
-    return { accessToken: tokens.sign(user.id), isNewUser: !existing, user: toPublicUser(user) };
+    return {
+      accessToken: tokens.sign(user.id),
+      isNewUser: !existing,
+      user: await this.toPublic(user),
+    };
   }
 
   /** 429 during the resend cooldown, or when the phone used up its requests for the window. */
   private async ensureMayRequest(phone: string, now: Date, windowStart: Date): Promise<void> {
     const { settings } = this.deps;
+    if (!settings.rateLimitEnabled) return;
     const times = (await this.deps.otps.listRequestTimes(phone, windowStart)).map((t) =>
       t.getTime(),
     );
@@ -104,8 +131,47 @@ export class AuthService {
   }
 
   async getProfile(userId: string): Promise<PublicUser> {
+    return this.toPublic(await this.findUser(userId));
+  }
+
+  async updateProfile(userId: string, profile: UpdateProfileInput): Promise<PublicUser> {
+    const user = await this.findUser(userId);
+    return this.toPublic(await this.deps.users.updateProfile(user.id, profile));
+  }
+
+  /** Stores (or replaces) the avatar. The type comes from the magic bytes, not the client. */
+  async uploadAvatar(userId: string, data: Uint8Array): Promise<PublicUser> {
+    const user = await this.findUser(userId);
+    const contentType = detectImageType(data);
+    if (!contentType) {
+      throw new ValidationError({ avatar: ['Must be a JPEG, PNG or WebP image'] });
+    }
+    const avatar = await this.deps.avatars.save(user.id, { contentType, data });
+    return toPublicUser(user, avatar.updatedAt);
+  }
+
+  async getAvatar(userId: string): Promise<UserAvatar> {
+    const user = await this.findUser(userId);
+    const avatar = await this.deps.avatars.findByUserId(user.id);
+    if (!avatar) throw new NotFoundError('Avatar');
+    return avatar;
+  }
+
+  /** Idempotent: deleting a missing avatar still succeeds. */
+  async deleteAvatar(userId: string): Promise<PublicUser> {
+    const user = await this.findUser(userId);
+    await this.deps.avatars.delete(user.id);
+    return toPublicUser(user, null);
+  }
+
+  /** 404 for an unknown or malformed id (a valid token whose user was deleted). */
+  private async findUser(userId: string): Promise<User> {
     const user = OBJECT_ID_PATTERN.test(userId) ? await this.deps.users.findById(userId) : null;
-    if (!user) throw new UnauthorizedError();
-    return toPublicUser(user);
+    if (!user) throw new NotFoundError('User');
+    return user;
+  }
+
+  private async toPublic(user: User): Promise<PublicUser> {
+    return toPublicUser(user, await this.deps.avatars.findUpdatedAt(user.id));
   }
 }

@@ -10,23 +10,66 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// A car in one user's garage. Make/model/trim are ids from the static vehicle catalog (backend code).
+// Plate uniqueness per user is checked by the service: older documents lack these fields,
+// so a unique index could not be built over them.
 model Vehicle {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  make      String
-  model     String
-  year      Int
-  mileageKm Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String        @db.ObjectId
+  nickname   String
+  plate      Plate
+  vin        String?
+  makeId     String
+  modelId    String
+  trimId     String?
+  yearJalali Int
+  mileageKm  Int
+  color      VehicleColor?
+  isDefault  Boolean       @default(false)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
 
+  @@index([userId])
   @@map("vehicles")
 }
 
+/// Iranian plate, Latin digits: 72 ب 345 - 68.
+type Plate {
+  twoDigits    String
+  letter       String
+  threeDigits  String
+  provinceCode String
+}
+
+enum VehicleColor {
+  white
+  black
+  silver
+  blue
+  red
+  beige
+}
+
+// Vehicle photo, one per vehicle; an upload replaces it. Bytes stay out of `vehicles` so vehicle reads stay small.
+model VehiclePhoto {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  vehicleId   String   @unique @db.ObjectId
+  contentType String
+  data        Bytes
+  updatedAt   DateTime @updatedAt
+
+  @@map("vehicle_photos")
+}
+
 model User {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  phone     String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  phone     String    @unique
+  firstName String?
+  lastName  String?
+  /// UTC midnight of the Gregorian birth date.
+  birthDate DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@map("users")
 }
@@ -56,4 +99,15 @@ model OtpRequest {
   @@index([phone, createdAt])
   @@index([createdAt])
   @@map("otp_requests")
+}
+
+// Profile photo, one per user; an upload replaces it. Bytes stay out of `users` so user reads stay small.
+model UserAvatar {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @unique @db.ObjectId
+  contentType String
+  data        Bytes
+  updatedAt   DateTime @updatedAt
+
+  @@map("user_avatars")
 }

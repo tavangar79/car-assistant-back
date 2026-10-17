@@ -22,6 +22,7 @@ describe('loadEnv', () => {
       JWT_EXPIRES_IN: '30d',
       SMS_PROVIDER: 'console',
       OTP_LENGTH: 5,
+      OTP_RATE_LIMIT_ENABLED: true,
       OTP_TTL_SECONDS: 300,
       OTP_RESEND_COOLDOWN_SECONDS: 300,
       OTP_MAX_ATTEMPTS: 5,
@@ -33,6 +34,16 @@ describe('loadEnv', () => {
       CORS_ORIGINS: [],
     });
     expect(env.OTP_FIXED_CODE).toBeUndefined();
+  });
+
+  it('reads OTP_RATE_LIMIT_ENABLED as a boolean and rejects other values', () => {
+    expect(loadEnv({ ...base, OTP_RATE_LIMIT_ENABLED: 'false' }).OTP_RATE_LIMIT_ENABLED).toBe(
+      false,
+    );
+    expect(loadEnv({ ...base, OTP_RATE_LIMIT_ENABLED: 'true' }).OTP_RATE_LIMIT_ENABLED).toBe(true);
+    expect(() => loadEnv({ ...base, OTP_RATE_LIMIT_ENABLED: 'no' })).toThrow(
+      /OTP_RATE_LIMIT_ENABLED/,
+    );
   });
 
   it('rejects a JWT_EXPIRES_IN without a unit', () => {
