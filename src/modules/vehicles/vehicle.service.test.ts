@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { ConflictError, NotFoundError, ValidationError } from '../../shared/errors.ts';
+import { AppError, ConflictError, NotFoundError, ValidationError } from '../../shared/errors.ts';
 import { JPEG_BYTES, PNG_BYTES, WEBP_BYTES } from '../../test/image-fixtures.ts';
+import { InMemoryOdometerReadingRepository } from '../../test/in-memory-odometer.repository.ts';
+import { InMemoryServiceIntervalRepository } from '../../test/in-memory-service-interval.repository.ts';
+import { InMemoryServiceInvoiceRepository } from '../../test/in-memory-service-invoice.repository.ts';
+import { InMemoryServiceVisitRepository } from '../../test/in-memory-service-visit.repository.ts';
 import { InMemoryVehiclePhotoRepository } from '../../test/in-memory-vehicle-photo.repository.ts';
 import { InMemoryVehicleRepository } from '../../test/in-memory-vehicle.repository.ts';
 import { VEHICLE_CATALOG } from '../vehicle-catalog/vehicle-catalog.data.ts';
@@ -44,14 +48,26 @@ async function validationDetails(promise: Promise<unknown>): Promise<unknown> {
 describe('VehicleService', () => {
   let vehicles: InMemoryVehicleRepository;
   let photos: InMemoryVehiclePhotoRepository;
+  let readings: InMemoryOdometerReadingRepository;
+  let serviceVisits: InMemoryServiceVisitRepository;
+  let serviceInvoices: InMemoryServiceInvoiceRepository;
+  let serviceIntervals: InMemoryServiceIntervalRepository;
   let service: VehicleService;
 
   beforeEach(() => {
     vehicles = new InMemoryVehicleRepository();
     photos = new InMemoryVehiclePhotoRepository();
+    readings = new InMemoryOdometerReadingRepository(vehicles);
+    serviceVisits = new InMemoryServiceVisitRepository();
+    serviceInvoices = new InMemoryServiceInvoiceRepository();
+    serviceIntervals = new InMemoryServiceIntervalRepository();
     service = new VehicleService({
       vehicles,
       photos,
+      readings,
+      serviceVisits,
+      serviceInvoices,
+      serviceIntervals,
       catalog: new VehicleCatalog(VEHICLE_CATALOG),
       now: () => NOW,
     });
@@ -159,6 +175,10 @@ describe('VehicleService', () => {
       service = new VehicleService({
         vehicles,
         photos,
+        readings,
+        serviceVisits,
+        serviceInvoices,
+        serviceIntervals,
         catalog: new VehicleCatalog(VEHICLE_CATALOG),
         now: () => new Date('2026-03-20T12:00:00Z'), // Still 1404 in Tehran.
       });
@@ -282,6 +302,43 @@ describe('VehicleService', () => {
 
       expect((await service.getById(ALICE, first.id)).isDefault).toBe(false);
       expect((await service.getById(ALICE, second.id)).isDefault).toBe(true);
+      expect((await service.list(ALICE)).filter((v) => v.isDefault)).toHaveLength(1);
+    });
+
+    it('rejects unsetting the default with 422 and changes nothing', async () => {
+      const created = await service.create(ALICE, vehicleInput());
+
+      const err = await service
+        .update(ALICE, created.id, { isDefault: false, mileageKm: 1 })
+        .catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(AppError);
+      expect(err).toMatchObject({
+        statusCode: 422,
+        message: 'Set another vehicle as default instead',
+      });
+      expect(await service.getById(ALICE, created.id)).toMatchObject({
+        isDefault: true,
+        mileageKm: 34500,
+      });
+    });
+
+    it('ignores isDefault false on a vehicle that is not the default', async () => {
+      const first = await service.create(ALICE, vehicleInput({ plate: plate('100') }));
+      const second = await service.create(ALICE, vehicleInput({ plate: plate('200') }));
+
+      const updated = await service.update(ALICE, second.id, { isDefault: false, mileageKm: 1 });
+
+      expect(updated).toMatchObject({ isDefault: false, mileageKm: 1 });
+      expect((await service.getById(ALICE, first.id)).isDefault).toBe(true);
+    });
+
+    it('keeps the default when isDefault true is sent to the default', async () => {
+      const created = await service.create(ALICE, vehicleInput());
+
+      await expect(service.update(ALICE, created.id, { isDefault: true })).resolves.toMatchObject({
+        isDefault: true,
+      });
     });
   });
 
@@ -296,6 +353,50 @@ describe('VehicleService', () => {
       expect(photos.photos.size).toBe(0);
     });
 
+    it('removes its odometer readings but not those of other vehicles', async () => {
+      const removed = await service.create(ALICE, vehicleInput({ plate: plate('100') }));
+      const kept = await service.create(ALICE, vehicleInput({ plate: plate('200') }));
+      const recordedAt = NOW;
+      await readings.record({ vehicleId: removed.id, mileageKm: 40000, recordedAt });
+      await readings.record({ vehicleId: kept.id, mileageKm: 40000, recordedAt });
+
+      await service.remove(ALICE, removed.id);
+
+      expect(readings.readings.map((r) => r.vehicleId)).toEqual([kept.id]);
+    });
+
+    it('removes its service visits, invoices and interval overrides but not those of other vehicles', async () => {
+      const removed = await service.create(ALICE, vehicleInput({ plate: plate('100') }));
+      const kept = await service.create(ALICE, vehicleInput({ plate: plate('200') }));
+      const visitOf = async (vehicleId: string) => {
+        const visit = await serviceVisits.create({
+          vehicleId,
+          serviceDate: NOW,
+          odometerKm: 1000,
+          workshop: 'x',
+          notes: null,
+          lineItems: [],
+          totalCost: 0,
+        });
+        await serviceInvoices.save(visit.id, {
+          fileName: 'a.png',
+          contentType: 'image/png',
+          data: PNG_BYTES,
+        });
+        await serviceIntervals.save({ vehicleId, intervalId: 'engine_oil', km: 7000, months: 6 });
+        return visit;
+      };
+      await visitOf(removed.id);
+      const keptVisit = await visitOf(kept.id);
+
+      await service.remove(ALICE, removed.id);
+
+      expect([...serviceVisits.visits.keys()]).toEqual([keptVisit.id]);
+      expect([...serviceInvoices.invoices.keys()]).toEqual([keptVisit.id]);
+      expect((await serviceIntervals.listByVehicle(removed.id)).length).toBe(0);
+      expect((await serviceIntervals.listByVehicle(kept.id)).length).toBe(1);
+    });
+
     it('makes the newest remaining vehicle default when the default goes', async () => {
       const first = await service.create(ALICE, vehicleInput({ plate: plate('100') }));
       await service.create(ALICE, vehicleInput({ plate: plate('200') }));
@@ -305,6 +406,26 @@ describe('VehicleService', () => {
 
       expect((await service.getById(ALICE, third.id)).isDefault).toBe(true);
       expect((await service.list(ALICE)).filter((v) => v.isDefault)).toHaveLength(1);
+    });
+
+    it('promotes the newest remaining vehicle, not the oldest', async () => {
+      const first = await service.create(ALICE, vehicleInput({ plate: plate('100') }));
+      const second = await service.create(ALICE, vehicleInput({ plate: plate('200') }));
+      const third = await service.create(ALICE, vehicleInput({ plate: plate('300') }));
+      await service.update(ALICE, second.id, { isDefault: true });
+
+      await service.remove(ALICE, second.id);
+
+      expect((await service.getById(ALICE, third.id)).isDefault).toBe(true);
+      expect((await service.getById(ALICE, first.id)).isDefault).toBe(false);
+    });
+
+    it('leaves no default when the last vehicle goes', async () => {
+      const created = await service.create(ALICE, vehicleInput());
+
+      await service.remove(ALICE, created.id);
+
+      expect(await service.list(ALICE)).toEqual([]);
     });
 
     it('keeps the default when another vehicle goes', async () => {

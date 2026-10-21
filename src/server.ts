@@ -8,6 +8,11 @@ import { PrismaOtpRepository } from './modules/auth/otp.repository.ts';
 import { createSmsSender } from './modules/auth/sms-sender.ts';
 import { TokenService } from './modules/auth/token.service.ts';
 import { PrismaUserRepository } from './modules/auth/user.repository.ts';
+import { PrismaServiceIntervalRepository } from './modules/service-intervals/service-interval.repository.ts';
+import { PrismaServiceInvoiceRepository } from './modules/service-visits/service-invoice.repository.ts';
+import { PrismaServiceVisitRepository } from './modules/service-visits/service-visit.repository.ts';
+import { SERVICE_INVOICE_MAX_BYTES } from './modules/service-visits/service-visit.routes.ts';
+import { PrismaOdometerReadingRepository } from './modules/vehicles/odometer.repository.ts';
 import { PrismaVehiclePhotoRepository } from './modules/vehicles/vehicle-photo.repository.ts';
 import { PrismaVehicleRepository } from './modules/vehicles/vehicle.repository.ts';
 import { VEHICLE_PHOTO_MAX_BYTES } from './modules/vehicles/vehicle.routes.ts';
@@ -19,6 +24,11 @@ const app = createApp({
   vehicleRepository: new PrismaVehicleRepository(prisma),
   vehiclePhotoRepository: new PrismaVehiclePhotoRepository(prisma),
   vehiclePhotoMaxBytes: VEHICLE_PHOTO_MAX_BYTES,
+  odometerReadingRepository: new PrismaOdometerReadingRepository(prisma),
+  serviceVisitRepository: new PrismaServiceVisitRepository(prisma),
+  serviceInvoiceRepository: new PrismaServiceInvoiceRepository(prisma),
+  serviceInvoiceMaxBytes: SERVICE_INVOICE_MAX_BYTES,
+  serviceIntervalRepository: new PrismaServiceIntervalRepository(prisma),
   userRepository: new PrismaUserRepository(prisma),
   avatarRepository: new PrismaAvatarRepository(prisma),
   avatarMaxBytes: AVATAR_MAX_BYTES,

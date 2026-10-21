@@ -43,14 +43,21 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     return updated;
   }
 
-  async clearDefault(userId: string): Promise<void> {
+  async makeDefault(userId: string, id: string): Promise<VehicleRecord> {
     for (const vehicle of this.vehicles.values()) {
-      if (vehicle.userId === userId)
+      if (vehicle.userId === userId && vehicle.id !== id)
         this.vehicles.set(vehicle.id, { ...vehicle, isDefault: false });
     }
+    return this.update(id, { isDefault: true });
   }
 
-  async delete(id: string): Promise<void> {
+  async deleteAndPromote(userId: string, id: string): Promise<void> {
+    const deleted = this.vehicles.get(id);
     this.vehicles.delete(id);
+    if (!deleted?.isDefault) return;
+    const [newest] = (await this.listByUser(userId)).sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+    );
+    if (newest) this.vehicles.set(newest.id, { ...newest, isDefault: true });
   }
 }

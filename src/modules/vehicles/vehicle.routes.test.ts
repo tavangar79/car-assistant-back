@@ -208,6 +208,60 @@ describe('/api/vehicles', () => {
       expect(Object.keys(res.body.error.details)).toEqual(['plate.letter']);
     });
 
+    it('returns 422 when unsetting the default and changes nothing', async () => {
+      const created = await createVehicle();
+
+      const res = await request(app)
+        .patch(`/api/vehicles/${created.id}`)
+        .set('Authorization', ALICE)
+        .send({ isDefault: false, mileageKm: 1 })
+        .expect(422);
+
+      expect(res.body).toEqual({ error: { message: 'Set another vehicle as default instead' } });
+      const after = await request(app)
+        .get(`/api/vehicles/${created.id}`)
+        .set('Authorization', ALICE);
+      expect(after.body).toMatchObject({ isDefault: true, mileageKm: 34500 });
+    });
+
+    it('returns 200 for isDefault false on a non-default vehicle', async () => {
+      await createVehicle();
+      const second = await createVehicle(ALICE, {
+        plate: { ...body.plate, threeDigits: '999' },
+        isDefault: false,
+      });
+
+      const res = await request(app)
+        .patch(`/api/vehicles/${second.id}`)
+        .set('Authorization', ALICE)
+        .send({ isDefault: false })
+        .expect(200);
+
+      expect(res.body.isDefault).toBe(false);
+    });
+
+    it('moves the default with isDefault true', async () => {
+      const first = await createVehicle();
+      const second = await createVehicle(ALICE, {
+        plate: { ...body.plate, threeDigits: '999' },
+        isDefault: false,
+      });
+
+      await request(app)
+        .patch(`/api/vehicles/${second.id}`)
+        .set('Authorization', ALICE)
+        .send({ isDefault: true })
+        .expect(200);
+
+      const list = await request(app).get('/api/vehicles').set('Authorization', ALICE);
+      expect(list.body.map((v: { id: string; isDefault: boolean }) => [v.id, v.isDefault])).toEqual(
+        [
+          [second.id, true],
+          [first.id, false],
+        ],
+      );
+    });
+
     it("returns 404 for another user's vehicle", async () => {
       const bobs = await createVehicle(BOB);
 
@@ -219,7 +273,39 @@ describe('/api/vehicles', () => {
     });
   });
 
+  describe('POST default', () => {
+    it('makes the first vehicle default even when isDefault is false', async () => {
+      const res = await request(app)
+        .post('/api/vehicles')
+        .set('Authorization', ALICE)
+        .send({ ...body, isDefault: false })
+        .expect(201);
+
+      expect(res.body.isDefault).toBe(true);
+    });
+  });
+
   describe('DELETE', () => {
+    it('promotes the newest remaining vehicle when the default goes', async () => {
+      const first = await createVehicle();
+      await createVehicle(ALICE, {
+        plate: { ...body.plate, threeDigits: '998' },
+        isDefault: false,
+      });
+      const third = await createVehicle(ALICE, {
+        plate: { ...body.plate, threeDigits: '999' },
+        isDefault: false,
+      });
+
+      await request(app)
+        .delete(`/api/vehicles/${first.id}`)
+        .set('Authorization', ALICE)
+        .expect(204);
+
+      const res = await request(app).get(`/api/vehicles/${third.id}`).set('Authorization', ALICE);
+      expect(res.body.isDefault).toBe(true);
+    });
+
     it('returns 204 and the vehicle is gone', async () => {
       const created = await createVehicle();
 

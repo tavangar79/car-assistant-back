@@ -61,6 +61,76 @@ model VehiclePhoto {
   @@map("vehicle_photos")
 }
 
+// One odometer reading of a vehicle. Recording one also sets Vehicle.mileageKm (never lower).
+// Deleted with the vehicle by VehicleService.remove.
+model OdometerReading {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  vehicleId  String   @db.ObjectId
+  mileageKm  Int
+  recordedAt DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([vehicleId])
+  @@map("odometer_readings")
+}
+
+// One workshop visit of a vehicle. Line items reference the static service-items catalog (backend code).
+// `totalCost` is the sum of lineItems.cost, computed by ServiceVisitService. Deleted with the vehicle.
+model ServiceVisit {
+  id          String            @id @default(auto()) @map("_id") @db.ObjectId
+  vehicleId   String            @db.ObjectId
+  serviceDate DateTime
+  odometerKm  Int
+  workshop    String
+  notes       String?
+  lineItems   ServiceLineItem[]
+  totalCost   Int
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([vehicleId, serviceDate])
+  @@map("service_visits")
+}
+
+type ServiceLineItem {
+  itemId        String
+  brand         String?
+  /// Part and labour together (one field on the screen), in toman.
+  cost          Int
+  notes         String?
+  /// Sticker reminder: km after `odometerKm` (a delta).
+  nextDueKm     Int?
+  /// Sticker reminder: months after `serviceDate`.
+  nextDueMonths Int?
+}
+
+// Invoice photo, one per visit; an upload replaces it. Bytes stay out of `service_visits` so list reads stay small.
+// `sizeBytes` is stored so the visit JSON can report it without loading the bytes.
+model ServiceInvoice {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  serviceId   String   @unique @db.ObjectId
+  fileName    String
+  contentType String
+  sizeBytes   Int
+  data        Bytes
+  updatedAt   DateTime @updatedAt
+
+  @@map("service_invoices")
+}
+
+// A vehicle's override of one service interval. Only overrides are stored; a missing row means factory default.
+model ServiceInterval {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  vehicleId  String   @db.ObjectId
+  intervalId String
+  km         Int
+  months     Int
+  updatedAt  DateTime @updatedAt
+
+  @@unique([vehicleId, intervalId])
+  @@map("service_intervals")
+}
+
 model User {
   id        String    @id @default(auto()) @map("_id") @db.ObjectId
   phone     String    @unique

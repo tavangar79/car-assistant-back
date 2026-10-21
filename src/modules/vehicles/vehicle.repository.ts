@@ -9,9 +9,10 @@ export interface VehicleRepository {
   findForUser(id: string, userId: string): Promise<VehicleRecord | null>;
   create(vehicle: NewVehicle): Promise<VehicleRecord>;
   update(id: string, changes: VehicleChanges): Promise<VehicleRecord>;
-  /** Clears `isDefault` on every vehicle of the user. */
-  clearDefault(userId: string): Promise<void>;
-  delete(id: string): Promise<void>;
+  /** Atomically makes this the user's only default vehicle. */
+  makeDefault(userId: string, id: string): Promise<VehicleRecord>;
+  /** Atomically deletes the vehicle; if it was the default, the newest remaining one takes over. */
+  deleteAndPromote(userId: string, id: string): Promise<void>;
 }
 
 export class PrismaVehicleRepository implements VehicleRepository {
@@ -33,14 +34,26 @@ export class PrismaVehicleRepository implements VehicleRepository {
     return this.prisma.vehicle.update({ where: { id }, data: changes });
   }
 
-  async clearDefault(userId: string): Promise<void> {
-    await this.prisma.vehicle.updateMany({
-      where: { userId, isDefault: true },
-      data: { isDefault: false },
-    });
+  async makeDefault(userId: string, id: string): Promise<VehicleRecord> {
+    const [, vehicle] = await this.prisma.$transaction([
+      this.prisma.vehicle.updateMany({
+        where: { userId, isDefault: true, id: { not: id } },
+        data: { isDefault: false },
+      }),
+      this.prisma.vehicle.update({ where: { id }, data: { isDefault: true } }),
+    ]);
+    return vehicle;
   }
 
-  async delete(id: string): Promise<void> {
-    await this.prisma.vehicle.delete({ where: { id } });
+  async deleteAndPromote(userId: string, id: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const deleted = await tx.vehicle.delete({ where: { id } });
+      if (!deleted.isDefault) return;
+      const newest = await tx.vehicle.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (newest) await tx.vehicle.update({ where: { id: newest.id }, data: { isDefault: true } });
+    });
   }
 }

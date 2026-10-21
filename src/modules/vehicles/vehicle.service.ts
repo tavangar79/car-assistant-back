@@ -1,7 +1,11 @@
-import { ConflictError, NotFoundError, ValidationError } from '../../shared/errors.ts';
+import { AppError, ConflictError, NotFoundError, ValidationError } from '../../shared/errors.ts';
 import { detectImageType, type ImageContentType } from '../../shared/image-type.ts';
+import type { ServiceIntervalRepository } from '../service-intervals/service-interval.repository.ts';
+import type { ServiceInvoiceRepository } from '../service-visits/service-invoice.repository.ts';
+import type { ServiceVisitRepository } from '../service-visits/service-visit.repository.ts';
 import type { CatalogSelection, VehicleCatalog } from '../vehicle-catalog/vehicle-catalog.ts';
 import { jalaliYear } from './jalali-year.ts';
+import type { OdometerReadingRepository } from './odometer.repository.ts';
 import type { VehiclePhotoRepository } from './vehicle-photo.repository.ts';
 import type { VehicleRepository } from './vehicle.repository.ts';
 import type {
@@ -17,12 +21,17 @@ import type {
 export interface VehicleServiceDeps {
   vehicles: VehicleRepository;
   photos: VehiclePhotoRepository;
+  readings: OdometerReadingRepository;
+  serviceVisits: ServiceVisitRepository;
+  serviceInvoices: ServiceInvoiceRepository;
+  serviceIntervals: ServiceIntervalRepository;
   catalog: VehicleCatalog;
   now: () => Date;
 }
 
 export const VEHICLE_PHOTO_CONTENT_TYPES: readonly ImageContentType[] = ['image/jpeg', 'image/png'];
 export const VEHICLE_PHOTO_BAD_TYPE = 'Must be a JPEG or PNG image';
+export const DEFAULT_REQUIRED = 'Set another vehicle as default instead';
 
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
@@ -52,7 +61,7 @@ export class VehicleService {
     return this.withPhotoUrl(await this.findOwned(userId, id));
   }
 
-  /** The user's first vehicle is always the default; a new default clears the old one. */
+  /** The user's first vehicle is always the default; a new default replaces the old one. */
   async create(userId: string, input: CreateVehicleInput): Promise<Vehicle> {
     const { vehicles } = this.deps;
     const selection = {
@@ -65,9 +74,7 @@ export class VehicleService {
     const garage = await vehicles.listByUser(userId);
     this.ensurePlateIsFree(garage, input.plate);
 
-    const isDefault = garage.length === 0 || input.isDefault === true;
-    if (isDefault && garage.length > 0) await vehicles.clearDefault(userId);
-
+    const isFirst = garage.length === 0;
     const record = await vehicles.create({
       userId,
       nickname: input.nickname,
@@ -77,15 +84,21 @@ export class VehicleService {
       yearJalali: input.yearJalali,
       mileageKm: input.mileageKm,
       color: input.color ?? null,
-      isDefault,
+      isDefault: isFirst,
     });
-    return this.toVehicle(record, null);
+    const saved =
+      !isFirst && input.isDefault === true ? await vehicles.makeDefault(userId, record.id) : record;
+    return this.toVehicle(saved, null);
   }
 
-  /** Make, model and trim are checked as a combination with the stored values. */
+  /**
+   * Make, model and trim are checked as a combination with the stored values.
+   * The default can only move to another vehicle, never be unset (422).
+   */
   async update(userId: string, id: string, input: UpdateVehicleInput): Promise<Vehicle> {
     const { vehicles } = this.deps;
     const existing = await this.findOwned(userId, id);
+    if (input.isDefault === false && existing.isDefault) throw new AppError(422, DEFAULT_REQUIRED);
 
     const changesCatalog =
       input.makeId !== undefined || input.modelId !== undefined || input.trimId !== undefined;
@@ -104,7 +117,9 @@ export class VehicleService {
       const others = (await vehicles.listByUser(userId)).filter((v) => v.id !== existing.id);
       this.ensurePlateIsFree(others, input.plate);
     }
-    if (input.isDefault === true && !existing.isDefault) await vehicles.clearDefault(userId);
+    if (input.isDefault === true && !existing.isDefault) {
+      await vehicles.makeDefault(userId, existing.id);
+    }
 
     const changes: VehicleChanges = {
       nickname: input.nickname,
@@ -116,21 +131,24 @@ export class VehicleService {
       yearJalali: input.yearJalali,
       mileageKm: input.mileageKm,
       color: input.color,
-      isDefault: input.isDefault,
     };
     return this.withPhotoUrl(await vehicles.update(existing.id, changes));
   }
 
-  /** Deletes the photo too. If the default goes, the newest remaining vehicle becomes default. */
+  /**
+   * Deletes the photo, odometer readings, service visits (with invoices) and interval overrides too.
+   * If the default goes, the newest remaining vehicle becomes default.
+   */
   async remove(userId: string, id: string): Promise<void> {
-    const { vehicles, photos } = this.deps;
+    const { vehicles, photos, readings, serviceVisits, serviceInvoices, serviceIntervals } =
+      this.deps;
     const existing = await this.findOwned(userId, id);
     await photos.delete(existing.id);
-    await vehicles.delete(existing.id);
-
-    if (!existing.isDefault) return;
-    const [newest] = (await vehicles.listByUser(userId)).sort(newestFirst);
-    if (newest) await vehicles.update(newest.id, { isDefault: true });
+    await readings.deleteByVehicle(existing.id);
+    const serviceIds = await serviceVisits.deleteByVehicle(existing.id);
+    await serviceInvoices.deleteByServiceIds(serviceIds);
+    await serviceIntervals.deleteByVehicle(existing.id);
+    await vehicles.deleteAndPromote(userId, existing.id);
   }
 
   /** Stores (or replaces) the photo. The type comes from the magic bytes, not the client. */
