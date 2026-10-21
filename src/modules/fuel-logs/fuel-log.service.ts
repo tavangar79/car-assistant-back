@@ -24,6 +24,11 @@ export const FUEL_LIST_LIMIT = 50;
 
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
+/** The API shape of a log; `economy` comes from `computeEconomy` over every log of its vehicle. */
+export function toFuelLog(log: FuelLogRecord, economy: Map<string, number | null>): FuelLog {
+  return { ...log, economy: economy.get(log.id) ?? null };
+}
+
 /** Fuel logs of a user's vehicle. Another user's vehicle or log is "not found". */
 export class FuelLogService {
   constructor(private readonly deps: FuelLogServiceDeps) {}
@@ -33,9 +38,7 @@ export class FuelLogService {
     const vehicle = await this.deps.vehicles.getById(userId, vehicleId);
     const logs = await this.deps.logs.listByVehicle(vehicle.id);
     const economy = computeEconomy(logs);
-    return logs
-      .slice(0, FUEL_LIST_LIMIT)
-      .map((log) => ({ ...log, economy: economy.get(log.id) ?? null }));
+    return logs.slice(0, FUEL_LIST_LIMIT).map((log) => toFuelLog(log, economy));
   }
 
   async getById(userId: string, vehicleId: string, fuelLogId: string): Promise<FuelLog> {
@@ -125,7 +128,6 @@ export class FuelLogService {
   }
 
   private async withEconomy(log: FuelLogRecord): Promise<FuelLog> {
-    const economy = computeEconomy(await this.deps.logs.listByVehicle(log.vehicleId));
-    return { ...log, economy: economy.get(log.id) ?? null };
+    return toFuelLog(log, computeEconomy(await this.deps.logs.listByVehicle(log.vehicleId)));
   }
 }

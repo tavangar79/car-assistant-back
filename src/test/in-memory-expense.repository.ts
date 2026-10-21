@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { inRange, type DateRange } from '../shared/date-range.ts';
 import type { ExpenseRepository } from '../modules/expenses/expense.repository.ts';
 import type {
   ExpenseChanges,
@@ -12,13 +13,16 @@ export class InMemoryExpenseRepository implements ExpenseRepository {
   private clock = Date.UTC(2026, 0, 1);
 
   async listByVehicle(vehicleId: string, limit: number): Promise<ExpenseRecord[]> {
+    return (await this.listByVehicles([vehicleId])).slice(0, limit);
+  }
+
+  async listByVehicles(vehicleIds: string[], range: DateRange = {}): Promise<ExpenseRecord[]> {
     return [...this.expenses.values()]
-      .filter((expense) => expense.vehicleId === vehicleId)
+      .filter((expense) => vehicleIds.includes(expense.vehicleId) && inRange(expense.paidAt, range))
       .sort(
         (a, b) =>
           b.paidAt.getTime() - a.paidAt.getTime() || b.createdAt.getTime() - a.createdAt.getTime(),
-      )
-      .slice(0, limit);
+      );
   }
 
   async findForVehicle(id: string, vehicleId: string): Promise<ExpenseRecord | null> {

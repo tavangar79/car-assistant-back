@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import type { DateRange } from '../../shared/date-range.ts';
 import type {
   NewServiceVisit,
   ServiceVisitChanges,
@@ -8,8 +9,9 @@ import type {
 export interface ServiceVisitRepository {
   /** Newest `serviceDate` first, then newest `createdAt`. No `limit` returns every visit. */
   listByVehicle(vehicleId: string, limit?: number): Promise<ServiceVisitRecord[]>;
-  /** Every visit of these vehicles, newest `serviceDate` first, then newest `createdAt`. */
-  listByVehicles(vehicleIds: string[]): Promise<ServiceVisitRecord[]>;
+  /** Every visit of these vehicles (within `range` on `serviceDate`), newest `serviceDate` first, then newest `createdAt`. */
+  listByVehicles(vehicleIds: string[], range?: DateRange): Promise<ServiceVisitRecord[]>;
+  countByVehicles(vehicleIds: string[]): Promise<number>;
   /** The visit only if it belongs to the vehicle. */
   findForVehicle(id: string, vehicleId: string): Promise<ServiceVisitRecord | null>;
   create(visit: NewServiceVisit): Promise<ServiceVisitRecord>;
@@ -31,11 +33,15 @@ export class PrismaServiceVisitRepository implements ServiceVisitRepository {
     });
   }
 
-  listByVehicles(vehicleIds: string[]): Promise<ServiceVisitRecord[]> {
+  listByVehicles(vehicleIds: string[], range: DateRange = {}): Promise<ServiceVisitRecord[]> {
     return this.prisma.serviceVisit.findMany({
-      where: { vehicleId: { in: vehicleIds } },
+      where: { vehicleId: { in: vehicleIds }, serviceDate: { gte: range.from, lte: range.to } },
       orderBy: [{ serviceDate: 'desc' }, { createdAt: 'desc' }],
     });
+  }
+
+  countByVehicles(vehicleIds: string[]): Promise<number> {
+    return this.prisma.serviceVisit.count({ where: { vehicleId: { in: vehicleIds } } });
   }
 
   findForVehicle(id: string, vehicleId: string): Promise<ServiceVisitRecord | null> {

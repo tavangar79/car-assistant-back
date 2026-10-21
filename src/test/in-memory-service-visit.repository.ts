@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { inRange, type DateRange } from '../shared/date-range.ts';
 import type { ServiceVisitRepository } from '../modules/service-visits/service-visit.repository.ts';
 import type {
   NewServiceVisit,
@@ -16,14 +17,18 @@ export class InMemoryServiceVisitRepository implements ServiceVisitRepository {
     return limit === undefined ? visits : visits.slice(0, limit);
   }
 
-  async listByVehicles(vehicleIds: string[]): Promise<ServiceVisitRecord[]> {
+  async listByVehicles(vehicleIds: string[], range: DateRange = {}): Promise<ServiceVisitRecord[]> {
     return [...this.visits.values()]
-      .filter((visit) => vehicleIds.includes(visit.vehicleId))
+      .filter((visit) => vehicleIds.includes(visit.vehicleId) && inRange(visit.serviceDate, range))
       .sort(
         (a, b) =>
           b.serviceDate.getTime() - a.serviceDate.getTime() ||
           b.createdAt.getTime() - a.createdAt.getTime(),
       );
+  }
+
+  async countByVehicles(vehicleIds: string[]): Promise<number> {
+    return (await this.listByVehicles(vehicleIds)).length;
   }
 
   async findForVehicle(id: string, vehicleId: string): Promise<ServiceVisitRecord | null> {

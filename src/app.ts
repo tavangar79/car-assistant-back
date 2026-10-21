@@ -13,6 +13,8 @@ import { requireAuth } from './modules/auth/require-auth.ts';
 import type { SmsSender } from './modules/auth/sms-sender.ts';
 import type { TokenService } from './modules/auth/token.service.ts';
 import type { UserRepository } from './modules/auth/user.repository.ts';
+import { dashboardRoutes } from './modules/dashboard/dashboard.routes.ts';
+import { DashboardService } from './modules/dashboard/dashboard.service.ts';
 import type { ExpenseAttachmentRepository } from './modules/expenses/expense-attachment.repository.ts';
 import type { ExpenseRepository } from './modules/expenses/expense.repository.ts';
 import { expenseRoutes } from './modules/expenses/expense.routes.ts';
@@ -20,6 +22,10 @@ import { ExpenseService } from './modules/expenses/expense.service.ts';
 import type { FuelLogRepository } from './modules/fuel-logs/fuel-log.repository.ts';
 import { fuelLogRoutes } from './modules/fuel-logs/fuel-log.routes.ts';
 import { FuelLogService } from './modules/fuel-logs/fuel-log.service.ts';
+import { historyRoutes } from './modules/history/history.routes.ts';
+import { HistoryService } from './modules/history/history.service.ts';
+import { profileRoutes } from './modules/profile/profile.routes.ts';
+import { ProfileService } from './modules/profile/profile.service.ts';
 import { SERVICE_INTERVALS } from './modules/service-intervals/service-interval.data.ts';
 import type { ServiceIntervalRepository } from './modules/service-intervals/service-interval.repository.ts';
 import { serviceIntervalRoutes } from './modules/service-intervals/service-interval.routes.ts';
@@ -158,7 +164,29 @@ export function createApp(deps: AppDependencies): Express {
     vehicles: vehicleService,
     now: deps.now,
   });
+  const historyService = new HistoryService({
+    vehicles: vehicleService,
+    visits: deps.serviceVisitRepository,
+    invoices: deps.serviceInvoiceRepository,
+    fuelLogs: deps.fuelLogRepository,
+    expenses: deps.expenseRepository,
+    attachments: deps.expenseAttachmentRepository,
+    items: serviceItems,
+  });
+  const dashboardService = new DashboardService({
+    vehicles: vehicleService,
+    history: historyService,
+    intervals: serviceIntervalService,
+    now: deps.now,
+  });
+  const profileService = new ProfileService({
+    vehicles: vehicleService,
+    visits: deps.serviceVisitRepository,
+  });
   app.use('/api/service-suggestions', authenticate, serviceSuggestionRoutes(serviceVisitService));
+  app.use('/api/history', authenticate, historyRoutes(historyService));
+  app.use('/api/dashboard', authenticate, dashboardRoutes(dashboardService));
+  app.use('/api/profile', authenticate, profileRoutes(profileService));
   app.use(
     '/api/vehicles',
     authenticate,

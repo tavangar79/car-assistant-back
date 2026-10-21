@@ -1,9 +1,12 @@
 import type { PrismaClient } from '@prisma/client';
+import type { DateRange } from '../../shared/date-range.ts';
 import type { ExpenseChanges, ExpenseRecord, NewExpense } from './expense.types.ts';
 
 export interface ExpenseRepository {
   /** Newest `paidAt` first, then newest `createdAt`. */
   listByVehicle(vehicleId: string, limit: number): Promise<ExpenseRecord[]>;
+  /** Every expense of these vehicles (within `range` on `paidAt`), newest `paidAt` first, then newest `createdAt`. */
+  listByVehicles(vehicleIds: string[], range?: DateRange): Promise<ExpenseRecord[]>;
   /** The expense only if it belongs to the vehicle. */
   findForVehicle(id: string, vehicleId: string): Promise<ExpenseRecord | null>;
   create(expense: NewExpense): Promise<ExpenseRecord>;
@@ -22,6 +25,13 @@ export class PrismaExpenseRepository implements ExpenseRepository {
       where: { vehicleId },
       orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
       take: limit,
+    });
+  }
+
+  listByVehicles(vehicleIds: string[], range: DateRange = {}): Promise<ExpenseRecord[]> {
+    return this.prisma.expense.findMany({
+      where: { vehicleId: { in: vehicleIds }, paidAt: { gte: range.from, lte: range.to } },
+      orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
     });
   }
 

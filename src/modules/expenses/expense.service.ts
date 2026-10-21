@@ -37,6 +37,20 @@ export interface AttachmentUpload {
   data: Uint8Array;
 }
 
+/** The API shape of an expense: the record plus its attachment facts and URL. */
+export function toExpense(
+  expense: ExpenseRecord,
+  attachment: ExpenseAttachmentMeta | null,
+): Expense {
+  return {
+    ...expense,
+    attachment,
+    attachmentUrl: attachment
+      ? `/api/vehicles/${expense.vehicleId}/expenses/${expense.id}/attachment?v=${attachment.updatedAt.getTime()}`
+      : null,
+  };
+}
+
 /** Expenses of a user's vehicle. Another user's vehicle or expense is "not found". */
 export class ExpenseService {
   constructor(private readonly deps: ExpenseServiceDeps) {}
@@ -46,7 +60,7 @@ export class ExpenseService {
     const vehicle = await this.deps.vehicles.getById(userId, vehicleId);
     const expenses = await this.deps.expenses.listByVehicle(vehicle.id, EXPENSE_LIST_LIMIT);
     const metas = await this.deps.attachments.findMetas(expenses.map((expense) => expense.id));
-    return expenses.map((expense) => this.toExpense(expense, metas.get(expense.id) ?? null));
+    return expenses.map((expense) => toExpense(expense, metas.get(expense.id) ?? null));
   }
 
   async getById(userId: string, vehicleId: string, expenseId: string): Promise<Expense> {
@@ -72,7 +86,7 @@ export class ExpenseService {
       paymentMethod: input.paymentMethod ?? null,
       issuer: input.issuer ?? null,
     });
-    return this.toExpense(expense, null);
+    return toExpense(expense, null);
   }
 
   /** `expiresAt: null` clears the expiry. The `expiresAt > paidAt` rule is checked on the merged record. */
@@ -128,7 +142,7 @@ export class ExpenseService {
     const contentType = detectFileType(data, EXPENSE_ATTACHMENT_CONTENT_TYPES);
     if (!contentType) throw new ValidationError({ attachment: [EXPENSE_ATTACHMENT_BAD_TYPE] });
     const meta = await this.deps.attachments.save(expense.id, { fileName, contentType, data });
-    return this.toExpense(expense, meta);
+    return toExpense(expense, meta);
   }
 
   async getAttachment(
@@ -146,7 +160,7 @@ export class ExpenseService {
   async deleteAttachment(userId: string, vehicleId: string, expenseId: string): Promise<Expense> {
     const expense = await this.findOwned(userId, vehicleId, expenseId);
     await this.deps.attachments.deleteByExpenseIds([expense.id]);
-    return this.toExpense(expense, null);
+    return toExpense(expense, null);
   }
 
   /** Rules zod can't express: the date bound depends on today, and the expiry on the merged record. */
@@ -161,7 +175,10 @@ export class ExpenseService {
     expiresAt: Date | null;
   }): void {
     const details: Record<string, string[]> = {};
-    if (changedPaidAt && changedPaidAt.getTime() > this.deps.now().getTime() + FUTURE_TOLERANCE_MS) {
+    if (
+      changedPaidAt &&
+      changedPaidAt.getTime() > this.deps.now().getTime() + FUTURE_TOLERANCE_MS
+    ) {
       details.paidAt = ['Must not be in the future'];
     }
     if (expiresAt && expiresAt.getTime() <= paidAt.getTime()) {
@@ -186,16 +203,6 @@ export class ExpenseService {
 
   private async withAttachment(expense: ExpenseRecord): Promise<Expense> {
     const metas = await this.deps.attachments.findMetas([expense.id]);
-    return this.toExpense(expense, metas.get(expense.id) ?? null);
-  }
-
-  private toExpense(expense: ExpenseRecord, attachment: ExpenseAttachmentMeta | null): Expense {
-    return {
-      ...expense,
-      attachment,
-      attachmentUrl: attachment
-        ? `/api/vehicles/${expense.vehicleId}/expenses/${expense.id}/attachment?v=${attachment.updatedAt.getTime()}`
-        : null,
-    };
+    return toExpense(expense, metas.get(expense.id) ?? null);
   }
 }

@@ -72,6 +72,12 @@ describe('ServiceItemCatalog', () => {
     expect(catalog.has('nope')).toBe(false);
     expect(catalog.get('nope')).toBeUndefined();
   });
+
+  it('knows the category of an item', () => {
+    expect(catalog.categoryOf('front_brake_pads')).toBe('brakes');
+    expect(catalog.categoryOf('fuel_filter')).toBe('fluids');
+    expect(catalog.categoryOf('nope')).toBeUndefined();
+  });
 });
 
 describe('GET /api/service-items', () => {

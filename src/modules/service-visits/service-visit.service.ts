@@ -57,6 +57,20 @@ const toLineItem = (input: LineItemInput): ServiceLineItem => ({
 const totalCost = (lineItems: ServiceLineItem[]) =>
   lineItems.reduce((sum, item) => sum + item.cost, 0);
 
+/** The API shape of a visit: the record plus its invoice facts and URL. */
+export function toServiceVisit(
+  visit: ServiceVisitRecord,
+  invoice: ServiceInvoiceMeta | null,
+): ServiceVisit {
+  return {
+    ...visit,
+    invoice,
+    invoiceUrl: invoice
+      ? `/api/vehicles/${visit.vehicleId}/services/${visit.id}/invoice?v=${invoice.updatedAt.getTime()}`
+      : null,
+  };
+}
+
 /** Keeps the first occurrence of each distinct trimmed value, skipping blanks, up to `limit`. */
 class DistinctList {
   private readonly values = new Set<string>();
@@ -80,7 +94,7 @@ export class ServiceVisitService {
     const vehicle = await this.deps.vehicles.getById(userId, vehicleId);
     const visits = await this.deps.visits.listByVehicle(vehicle.id, SERVICE_LIST_LIMIT);
     const metas = await this.deps.invoices.findMetas(visits.map((visit) => visit.id));
-    return visits.map((visit) => this.toServiceVisit(visit, metas.get(visit.id) ?? null));
+    return visits.map((visit) => toServiceVisit(visit, metas.get(visit.id) ?? null));
   }
 
   async getById(userId: string, vehicleId: string, serviceId: string): Promise<ServiceVisit> {
@@ -108,7 +122,7 @@ export class ServiceVisitService {
       totalCost: totalCost(lineItems),
     });
     await this.raiseMileage(userId, vehicle, visit);
-    return this.toServiceVisit(visit, null);
+    return toServiceVisit(visit, null);
   }
 
   async update(
@@ -152,7 +166,7 @@ export class ServiceVisitService {
     const contentType = detectImageType(data, SERVICE_INVOICE_CONTENT_TYPES);
     if (!contentType) throw new ValidationError({ invoice: [SERVICE_INVOICE_BAD_TYPE] });
     const meta = await this.deps.invoices.save(visit.id, { fileName, contentType, data });
-    return this.toServiceVisit(visit, meta);
+    return toServiceVisit(visit, meta);
   }
 
   async getInvoice(userId: string, vehicleId: string, serviceId: string): Promise<ServiceInvoice> {
@@ -166,7 +180,7 @@ export class ServiceVisitService {
   async deleteInvoice(userId: string, vehicleId: string, serviceId: string): Promise<ServiceVisit> {
     const { visit } = await this.findOwned(userId, vehicleId, serviceId);
     await this.deps.invoices.deleteByServiceIds([visit.id]);
-    return this.toServiceVisit(visit, null);
+    return toServiceVisit(visit, null);
   }
 
   /** Workshops and per-item brands typed before, across every vehicle of the user. */
@@ -240,19 +254,6 @@ export class ServiceVisitService {
 
   private async withInvoice(visit: ServiceVisitRecord): Promise<ServiceVisit> {
     const metas = await this.deps.invoices.findMetas([visit.id]);
-    return this.toServiceVisit(visit, metas.get(visit.id) ?? null);
-  }
-
-  private toServiceVisit(
-    visit: ServiceVisitRecord,
-    invoice: ServiceInvoiceMeta | null,
-  ): ServiceVisit {
-    return {
-      ...visit,
-      invoice,
-      invoiceUrl: invoice
-        ? `/api/vehicles/${visit.vehicleId}/services/${visit.id}/invoice?v=${invoice.updatedAt.getTime()}`
-        : null,
-    };
+    return toServiceVisit(visit, metas.get(visit.id) ?? null);
   }
 }
