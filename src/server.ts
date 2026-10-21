@@ -8,6 +8,10 @@ import { PrismaOtpRepository } from './modules/auth/otp.repository.ts';
 import { createSmsSender } from './modules/auth/sms-sender.ts';
 import { TokenService } from './modules/auth/token.service.ts';
 import { PrismaUserRepository } from './modules/auth/user.repository.ts';
+import { PrismaExpenseAttachmentRepository } from './modules/expenses/expense-attachment.repository.ts';
+import { PrismaExpenseRepository } from './modules/expenses/expense.repository.ts';
+import { EXPENSE_ATTACHMENT_MAX_BYTES } from './modules/expenses/expense.routes.ts';
+import { PrismaFuelLogRepository } from './modules/fuel-logs/fuel-log.repository.ts';
 import { PrismaServiceIntervalRepository } from './modules/service-intervals/service-interval.repository.ts';
 import { PrismaServiceInvoiceRepository } from './modules/service-visits/service-invoice.repository.ts';
 import { PrismaServiceVisitRepository } from './modules/service-visits/service-visit.repository.ts';
@@ -29,6 +33,10 @@ const app = createApp({
   serviceInvoiceRepository: new PrismaServiceInvoiceRepository(prisma),
   serviceInvoiceMaxBytes: SERVICE_INVOICE_MAX_BYTES,
   serviceIntervalRepository: new PrismaServiceIntervalRepository(prisma),
+  fuelLogRepository: new PrismaFuelLogRepository(prisma),
+  expenseRepository: new PrismaExpenseRepository(prisma),
+  expenseAttachmentRepository: new PrismaExpenseAttachmentRepository(prisma),
+  expenseAttachmentMaxBytes: EXPENSE_ATTACHMENT_MAX_BYTES,
   userRepository: new PrismaUserRepository(prisma),
   avatarRepository: new PrismaAvatarRepository(prisma),
   avatarMaxBytes: AVATAR_MAX_BYTES,

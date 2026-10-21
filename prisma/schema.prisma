@@ -118,6 +118,69 @@ model ServiceInvoice {
   @@map("service_invoices")
 }
 
+// One refuelling of a vehicle. `economy` (L/100 km) is computed on read by FuelLogService, never stored.
+// A higher odometer also raises Vehicle.mileageKm. Deleted with the vehicle.
+model FuelLog {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  vehicleId     String   @db.ObjectId
+  fueledAt      DateTime
+  odometerKm    Int
+  /// regular | super | cng | lpg
+  fuelType      String
+  /// Litres (m³ for cng), at most 2 decimals.
+  volume        Float
+  /// Toman.
+  totalCost     Int
+  isFullFill    Boolean
+  station       String?
+  /// personal_fuel_card | station_fuel_card | bank_card | cash
+  paymentMethod String?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([vehicleId, fueledAt])
+  @@map("fuel_logs")
+}
+
+// One non-service cost of a vehicle (insurance, fine, toll, ...). Never touches Vehicle.mileageKm. Deleted with the vehicle.
+model Expense {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  vehicleId       String    @db.ObjectId
+  /// third_party_insurance | body_insurance | fine | toll | inspection | other
+  category        String
+  /// Toman.
+  amount          Int
+  title           String?
+  referenceNumber String?
+  paidAt          DateTime
+  expiresAt       DateTime?
+  /// The "ارسال اعلان یادآور" checkbox; used by Phase 5 notifications.
+  expiryReminder  Boolean   @default(true)
+  /// online | pos
+  paymentMethod   String?
+  issuer          String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([vehicleId, paidAt])
+  @@map("expenses")
+}
+
+// Attached receipt or policy, one per expense; an upload replaces it. Bytes stay out of `expenses` so list reads stay small.
+model ExpenseAttachment {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  expenseId   String   @unique @db.ObjectId
+  fileName    String
+  /// application/pdf | image/jpeg | image/png
+  contentType String
+  sizeBytes   Int
+  data        Bytes
+  updatedAt   DateTime @updatedAt
+
+  @@map("expense_attachments")
+}
+
 // A vehicle's override of one service interval. Only overrides are stored; a missing row means factory default.
 model ServiceInterval {
   id         String   @id @default(auto()) @map("_id") @db.ObjectId

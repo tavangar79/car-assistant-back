@@ -1,5 +1,8 @@
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../../shared/errors.ts';
 import { detectImageType, type ImageContentType } from '../../shared/image-type.ts';
+import type { ExpenseAttachmentRepository } from '../expenses/expense-attachment.repository.ts';
+import type { ExpenseRepository } from '../expenses/expense.repository.ts';
+import type { FuelLogRepository } from '../fuel-logs/fuel-log.repository.ts';
 import type { ServiceIntervalRepository } from '../service-intervals/service-interval.repository.ts';
 import type { ServiceInvoiceRepository } from '../service-visits/service-invoice.repository.ts';
 import type { ServiceVisitRepository } from '../service-visits/service-visit.repository.ts';
@@ -25,6 +28,9 @@ export interface VehicleServiceDeps {
   serviceVisits: ServiceVisitRepository;
   serviceInvoices: ServiceInvoiceRepository;
   serviceIntervals: ServiceIntervalRepository;
+  fuelLogs: FuelLogRepository;
+  expenses: ExpenseRepository;
+  expenseAttachments: ExpenseAttachmentRepository;
   catalog: VehicleCatalog;
   now: () => Date;
 }
@@ -136,18 +142,31 @@ export class VehicleService {
   }
 
   /**
-   * Deletes the photo, odometer readings, service visits (with invoices) and interval overrides too.
-   * If the default goes, the newest remaining vehicle becomes default.
+   * Deletes the photo, odometer readings, service visits (with invoices), interval overrides,
+   * fuel logs and expenses (with attachments) too. If the default goes, the newest remaining
+   * vehicle becomes default.
    */
   async remove(userId: string, id: string): Promise<void> {
-    const { vehicles, photos, readings, serviceVisits, serviceInvoices, serviceIntervals } =
-      this.deps;
+    const {
+      vehicles,
+      photos,
+      readings,
+      serviceVisits,
+      serviceInvoices,
+      serviceIntervals,
+      fuelLogs,
+      expenses,
+      expenseAttachments,
+    } = this.deps;
     const existing = await this.findOwned(userId, id);
     await photos.delete(existing.id);
     await readings.deleteByVehicle(existing.id);
     const serviceIds = await serviceVisits.deleteByVehicle(existing.id);
     await serviceInvoices.deleteByServiceIds(serviceIds);
     await serviceIntervals.deleteByVehicle(existing.id);
+    await fuelLogs.deleteByVehicle(existing.id);
+    const expenseIds = await expenses.deleteByVehicle(existing.id);
+    await expenseAttachments.deleteByExpenseIds(expenseIds);
     await vehicles.deleteAndPromote(userId, existing.id);
   }
 

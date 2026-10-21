@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../../shared/errors.ts';
-import { JPEG_BYTES, PNG_BYTES, WEBP_BYTES } from '../../test/image-fixtures.ts';
+import { JPEG_BYTES, PDF_BYTES, PNG_BYTES, WEBP_BYTES } from '../../test/image-fixtures.ts';
+import { InMemoryExpenseAttachmentRepository } from '../../test/in-memory-expense-attachment.repository.ts';
+import { InMemoryExpenseRepository } from '../../test/in-memory-expense.repository.ts';
+import { InMemoryFuelLogRepository } from '../../test/in-memory-fuel-log.repository.ts';
 import { InMemoryOdometerReadingRepository } from '../../test/in-memory-odometer.repository.ts';
 import { InMemoryServiceIntervalRepository } from '../../test/in-memory-service-interval.repository.ts';
 import { InMemoryServiceInvoiceRepository } from '../../test/in-memory-service-invoice.repository.ts';
@@ -52,6 +55,9 @@ describe('VehicleService', () => {
   let serviceVisits: InMemoryServiceVisitRepository;
   let serviceInvoices: InMemoryServiceInvoiceRepository;
   let serviceIntervals: InMemoryServiceIntervalRepository;
+  let fuelLogs: InMemoryFuelLogRepository;
+  let expenses: InMemoryExpenseRepository;
+  let expenseAttachments: InMemoryExpenseAttachmentRepository;
   let service: VehicleService;
 
   beforeEach(() => {
@@ -61,6 +67,9 @@ describe('VehicleService', () => {
     serviceVisits = new InMemoryServiceVisitRepository();
     serviceInvoices = new InMemoryServiceInvoiceRepository();
     serviceIntervals = new InMemoryServiceIntervalRepository();
+    fuelLogs = new InMemoryFuelLogRepository();
+    expenses = new InMemoryExpenseRepository();
+    expenseAttachments = new InMemoryExpenseAttachmentRepository();
     service = new VehicleService({
       vehicles,
       photos,
@@ -68,6 +77,9 @@ describe('VehicleService', () => {
       serviceVisits,
       serviceInvoices,
       serviceIntervals,
+      fuelLogs,
+      expenses,
+      expenseAttachments,
       catalog: new VehicleCatalog(VEHICLE_CATALOG),
       now: () => NOW,
     });
@@ -179,6 +191,9 @@ describe('VehicleService', () => {
         serviceVisits,
         serviceInvoices,
         serviceIntervals,
+        fuelLogs,
+        expenses,
+        expenseAttachments,
         catalog: new VehicleCatalog(VEHICLE_CATALOG),
         now: () => new Date('2026-03-20T12:00:00Z'), // Still 1404 in Tehran.
       });
@@ -395,6 +410,51 @@ describe('VehicleService', () => {
       expect([...serviceInvoices.invoices.keys()]).toEqual([keptVisit.id]);
       expect((await serviceIntervals.listByVehicle(removed.id)).length).toBe(0);
       expect((await serviceIntervals.listByVehicle(kept.id)).length).toBe(1);
+    });
+
+    it('removes its fuel logs, expenses and attachments but not those of other vehicles', async () => {
+      const removed = await service.create(ALICE, vehicleInput({ plate: plate('100') }));
+      const kept = await service.create(ALICE, vehicleInput({ plate: plate('200') }));
+      const recordsOf = async (vehicleId: string) => {
+        const log = await fuelLogs.create({
+          vehicleId,
+          fueledAt: NOW,
+          odometerKm: 1000,
+          fuelType: 'super',
+          volume: 40,
+          totalCost: 100,
+          isFullFill: true,
+          station: null,
+          paymentMethod: null,
+          notes: null,
+        });
+        const expense = await expenses.create({
+          vehicleId,
+          category: 'toll',
+          amount: 1000,
+          title: null,
+          referenceNumber: null,
+          paidAt: NOW,
+          expiresAt: null,
+          expiryReminder: true,
+          paymentMethod: null,
+          issuer: null,
+        });
+        await expenseAttachments.save(expense.id, {
+          fileName: 'a.pdf',
+          contentType: 'application/pdf',
+          data: PDF_BYTES,
+        });
+        return { log, expense };
+      };
+      await recordsOf(removed.id);
+      const keptRecords = await recordsOf(kept.id);
+
+      await service.remove(ALICE, removed.id);
+
+      expect([...fuelLogs.logs.keys()]).toEqual([keptRecords.log.id]);
+      expect([...expenses.expenses.keys()]).toEqual([keptRecords.expense.id]);
+      expect([...expenseAttachments.attachments.keys()]).toEqual([keptRecords.expense.id]);
     });
 
     it('makes the newest remaining vehicle default when the default goes', async () => {

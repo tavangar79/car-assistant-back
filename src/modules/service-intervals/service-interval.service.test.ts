@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { NotFoundError, ValidationError } from '../../shared/errors.ts';
+import { InMemoryExpenseAttachmentRepository } from '../../test/in-memory-expense-attachment.repository.ts';
+import { InMemoryExpenseRepository } from '../../test/in-memory-expense.repository.ts';
+import { InMemoryFuelLogRepository } from '../../test/in-memory-fuel-log.repository.ts';
 import { InMemoryOdometerReadingRepository } from '../../test/in-memory-odometer.repository.ts';
 import { InMemoryServiceIntervalRepository } from '../../test/in-memory-service-interval.repository.ts';
 import { InMemoryServiceInvoiceRepository } from '../../test/in-memory-service-invoice.repository.ts';
@@ -46,6 +49,9 @@ describe('ServiceIntervalService', () => {
       serviceVisits: visits,
       serviceInvoices: new InMemoryServiceInvoiceRepository(),
       serviceIntervals: overrides,
+      fuelLogs: new InMemoryFuelLogRepository(),
+      expenses: new InMemoryExpenseRepository(),
+      expenseAttachments: new InMemoryExpenseAttachmentRepository(),
       catalog: new VehicleCatalog(VEHICLE_CATALOG),
       now: () => NOW,
     });

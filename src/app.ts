@@ -13,6 +13,13 @@ import { requireAuth } from './modules/auth/require-auth.ts';
 import type { SmsSender } from './modules/auth/sms-sender.ts';
 import type { TokenService } from './modules/auth/token.service.ts';
 import type { UserRepository } from './modules/auth/user.repository.ts';
+import type { ExpenseAttachmentRepository } from './modules/expenses/expense-attachment.repository.ts';
+import type { ExpenseRepository } from './modules/expenses/expense.repository.ts';
+import { expenseRoutes } from './modules/expenses/expense.routes.ts';
+import { ExpenseService } from './modules/expenses/expense.service.ts';
+import type { FuelLogRepository } from './modules/fuel-logs/fuel-log.repository.ts';
+import { fuelLogRoutes } from './modules/fuel-logs/fuel-log.routes.ts';
+import { FuelLogService } from './modules/fuel-logs/fuel-log.service.ts';
 import { SERVICE_INTERVALS } from './modules/service-intervals/service-interval.data.ts';
 import type { ServiceIntervalRepository } from './modules/service-intervals/service-interval.repository.ts';
 import { serviceIntervalRoutes } from './modules/service-intervals/service-interval.routes.ts';
@@ -48,6 +55,11 @@ export interface AppDependencies {
   /** Largest accepted invoice photo upload, in bytes. */
   serviceInvoiceMaxBytes: number;
   serviceIntervalRepository: ServiceIntervalRepository;
+  fuelLogRepository: FuelLogRepository;
+  expenseRepository: ExpenseRepository;
+  expenseAttachmentRepository: ExpenseAttachmentRepository;
+  /** Largest accepted expense attachment upload, in bytes. */
+  expenseAttachmentMaxBytes: number;
   userRepository: UserRepository;
   avatarRepository: AvatarRepository;
   /** Largest accepted avatar upload, in bytes. */
@@ -105,6 +117,9 @@ export function createApp(deps: AppDependencies): Express {
     serviceVisits: deps.serviceVisitRepository,
     serviceInvoices: deps.serviceInvoiceRepository,
     serviceIntervals: deps.serviceIntervalRepository,
+    fuelLogs: deps.fuelLogRepository,
+    expenses: deps.expenseRepository,
+    expenseAttachments: deps.expenseAttachmentRepository,
     catalog: vehicleCatalog,
     now: deps.now,
   });
@@ -131,6 +146,18 @@ export function createApp(deps: AppDependencies): Express {
     readings: deps.odometerReadingRepository,
     now: deps.now,
   });
+  const fuelLogService = new FuelLogService({
+    logs: deps.fuelLogRepository,
+    vehicles: vehicleService,
+    odometer: odometerService,
+    now: deps.now,
+  });
+  const expenseService = new ExpenseService({
+    expenses: deps.expenseRepository,
+    attachments: deps.expenseAttachmentRepository,
+    vehicles: vehicleService,
+    now: deps.now,
+  });
   app.use('/api/service-suggestions', authenticate, serviceSuggestionRoutes(serviceVisitService));
   app.use(
     '/api/vehicles',
@@ -139,6 +166,8 @@ export function createApp(deps: AppDependencies): Express {
     odometerRoutes(odometerService),
     serviceVisitRoutes(serviceVisitService, deps.serviceInvoiceMaxBytes),
     serviceIntervalRoutes(serviceIntervalService),
+    fuelLogRoutes(fuelLogService),
+    expenseRoutes(expenseService, deps.expenseAttachmentMaxBytes),
   );
 
   app.use(notFoundHandler);
