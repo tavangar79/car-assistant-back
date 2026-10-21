@@ -15,14 +15,19 @@ describe('ProfileService.stats', () => {
     service = new ProfileService({
       vehicles: garage.vehicleService,
       visits: garage.repositories.serviceVisitRepository,
+      documents: garage.repositories.documentRepository,
     });
   });
 
   it('is zero for a new user', async () => {
-    expect(await service.stats(ALICE)).toEqual({ vehicleCount: 0, serviceCount: 0 });
+    expect(await service.stats(ALICE)).toEqual({
+      vehicleCount: 0,
+      serviceCount: 0,
+      documentCount: 0,
+    });
   });
 
-  it("counts the user's vehicles and their service visits only", async () => {
+  it("counts the user's vehicles, their service visits and documents only", async () => {
     const first = await garage.addVehicle(ALICE, '345');
     const second = await garage.addVehicle(ALICE, '346');
     const bobs = await garage.addVehicle(BOB, '999');
@@ -31,7 +36,15 @@ describe('ProfileService.stats', () => {
     await garage.addService(second, '2026-03-01T08:00:00Z', { battery: 1 });
     await garage.addService(bobs, '2026-03-01T08:00:00Z', { battery: 1 });
     await garage.addFuel(first, '2026-03-01T08:00:00Z');
+    await garage.addDocument(first);
+    await garage.addDocument(second);
+    await garage.addDocument(second);
+    await garage.addDocument(bobs);
 
-    expect(await service.stats(ALICE)).toEqual({ vehicleCount: 2, serviceCount: 3 });
+    expect(await service.stats(ALICE)).toEqual({
+      vehicleCount: 2,
+      serviceCount: 3,
+      documentCount: 3,
+    });
   });
 });

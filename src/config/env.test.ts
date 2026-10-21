@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { JWT_SECRET_PLACEHOLDER, loadEnv } from './env.ts';
 
+const KEY = Buffer.alloc(32, 7);
+
 const base = {
   DATABASE_URL: 'mongodb://localhost:27017/test',
   JWT_SECRET: 'a'.repeat(32),
+  DOCUMENT_ENCRYPTION_KEY: KEY.toString('base64'),
 };
 
 const production = {
@@ -100,6 +103,32 @@ describe('loadEnv', () => {
 
   it('boots in production with kavenegar and no fixed code', () => {
     expect(loadEnv(production)).toMatchObject({ NODE_ENV: 'production' });
+  });
+
+  describe('DOCUMENT_ENCRYPTION_KEY', () => {
+    it('decodes the base64 key to 32 bytes', () => {
+      expect(loadEnv(base).DOCUMENT_ENCRYPTION_KEY).toEqual(KEY);
+    });
+
+    it('is required', () => {
+      const withoutKey: Record<string, string> = { ...base };
+      delete withoutKey.DOCUMENT_ENCRYPTION_KEY;
+
+      expect(() => loadEnv(withoutKey)).toThrow(
+        /DOCUMENT_ENCRYPTION_KEY must be base64 of 32 bytes/,
+      );
+    });
+
+    it.each([
+      ['empty', ''],
+      ['16 bytes', Buffer.alloc(16).toString('base64')],
+      ['33 bytes', Buffer.alloc(33).toString('base64')],
+      ['not base64', 'not base64 at all!'],
+    ])('rejects a key that is %s', (_name, value) => {
+      expect(() => loadEnv({ ...base, DOCUMENT_ENCRYPTION_KEY: value })).toThrow(
+        /DOCUMENT_ENCRYPTION_KEY must be base64 of 32 bytes/,
+      );
+    });
   });
 
   describe('CORS_ORIGINS', () => {

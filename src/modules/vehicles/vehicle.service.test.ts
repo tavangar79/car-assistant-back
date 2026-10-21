@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../../shared/errors.ts';
 import { JPEG_BYTES, PDF_BYTES, PNG_BYTES, WEBP_BYTES } from '../../test/image-fixtures.ts';
+import { InMemoryDocumentFileRepository } from '../../test/in-memory-document-file.repository.ts';
+import { InMemoryDocumentRepository } from '../../test/in-memory-document.repository.ts';
 import { InMemoryExpenseAttachmentRepository } from '../../test/in-memory-expense-attachment.repository.ts';
 import { InMemoryExpenseRepository } from '../../test/in-memory-expense.repository.ts';
 import { InMemoryFuelLogRepository } from '../../test/in-memory-fuel-log.repository.ts';
+import { InMemoryNotificationRepository } from '../../test/in-memory-notification.repository.ts';
 import { InMemoryOdometerReadingRepository } from '../../test/in-memory-odometer.repository.ts';
 import { InMemoryServiceIntervalRepository } from '../../test/in-memory-service-interval.repository.ts';
 import { InMemoryServiceInvoiceRepository } from '../../test/in-memory-service-invoice.repository.ts';
@@ -58,6 +61,9 @@ describe('VehicleService', () => {
   let fuelLogs: InMemoryFuelLogRepository;
   let expenses: InMemoryExpenseRepository;
   let expenseAttachments: InMemoryExpenseAttachmentRepository;
+  let documents: InMemoryDocumentRepository;
+  let documentFiles: InMemoryDocumentFileRepository;
+  let notifications: InMemoryNotificationRepository;
   let service: VehicleService;
 
   beforeEach(() => {
@@ -70,6 +76,9 @@ describe('VehicleService', () => {
     fuelLogs = new InMemoryFuelLogRepository();
     expenses = new InMemoryExpenseRepository();
     expenseAttachments = new InMemoryExpenseAttachmentRepository();
+    documents = new InMemoryDocumentRepository();
+    documentFiles = new InMemoryDocumentFileRepository();
+    notifications = new InMemoryNotificationRepository();
     service = new VehicleService({
       vehicles,
       photos,
@@ -80,6 +89,9 @@ describe('VehicleService', () => {
       fuelLogs,
       expenses,
       expenseAttachments,
+      documents,
+      documentFiles,
+      notifications,
       catalog: new VehicleCatalog(VEHICLE_CATALOG),
       now: () => NOW,
     });
@@ -194,6 +206,9 @@ describe('VehicleService', () => {
         fuelLogs,
         expenses,
         expenseAttachments,
+        documents,
+        documentFiles,
+        notifications,
         catalog: new VehicleCatalog(VEHICLE_CATALOG),
         now: () => new Date('2026-03-20T12:00:00Z'), // Still 1404 in Tehran.
       });
@@ -455,6 +470,56 @@ describe('VehicleService', () => {
       expect([...fuelLogs.logs.keys()]).toEqual([keptRecords.log.id]);
       expect([...expenses.expenses.keys()]).toEqual([keptRecords.expense.id]);
       expect([...expenseAttachments.attachments.keys()]).toEqual([keptRecords.expense.id]);
+    });
+
+    it('removes its documents, document files and notifications but not those of other vehicles', async () => {
+      const removed = await service.create(ALICE, vehicleInput({ plate: plate('100') }));
+      const kept = await service.create(ALICE, vehicleInput({ plate: plate('200') }));
+      const recordsOf = async (vehicleId: string) => {
+        const document = await documents.create({
+          vehicleId,
+          type: 'vehicle_card',
+          title: null,
+          issuer: null,
+          number: null,
+          issuedAt: null,
+          expiresAt: null,
+          expiryReminder: true,
+          notes: null,
+        });
+        const file = await documentFiles.create({
+          documentId: document.id,
+          fileName: 'card.png',
+          contentType: 'image/png',
+          sizeBytes: 9,
+          data: PNG_BYTES,
+        });
+        await notifications.createMany([
+          {
+            userId: ALICE,
+            key: `document:${document.id}`,
+            kind: 'document_expiry',
+            vehicleId,
+            refId: document.id,
+            subject: 'کارت خودرو',
+            dueKm: null,
+            remainingKm: null,
+            mileageKm: null,
+            expiresAt: NOW,
+            thresholdDays: 7,
+            createdAt: NOW,
+          },
+        ]);
+        return { document, file };
+      };
+      await recordsOf(removed.id);
+      const keptRecords = await recordsOf(kept.id);
+
+      await service.remove(ALICE, removed.id);
+
+      expect([...documents.documents.keys()]).toEqual([keptRecords.document.id]);
+      expect([...documentFiles.files.keys()]).toEqual([keptRecords.file.id]);
+      expect([...notifications.notifications.values()].map((n) => n.vehicleId)).toEqual([kept.id]);
     });
 
     it('makes the newest remaining vehicle default when the default goes', async () => {

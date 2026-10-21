@@ -14,17 +14,19 @@ describe('GET /api/profile/stats', () => {
     await request(createApp(createTestDependencies())).get('/api/profile/stats').expect(401);
   });
 
-  it('returns 200 with only the vehicle and service counts', async () => {
+  it('returns 200 with the vehicle, service and document counts', async () => {
     const garage = createGarage(NOW);
     const app = createApp(createTestDependencies({ ...garage.repositories, now: () => NOW }));
     const car = await garage.addVehicle(ALICE_ID);
     await garage.addService(car, '2026-01-01T08:00:00Z', { battery: 1 });
+    await garage.addDocument(car);
+    await garage.addDocument(car);
 
     const res = await request(app)
       .get('/api/profile/stats')
       .set('Authorization', ALICE)
       .expect(200);
 
-    expect(res.body).toEqual({ stats: { vehicleCount: 1, serviceCount: 1 } });
+    expect(res.body).toEqual({ stats: { vehicleCount: 1, serviceCount: 1, documentCount: 2 } });
   });
 });

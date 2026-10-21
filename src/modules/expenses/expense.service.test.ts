@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { NotFoundError, ValidationError } from '../../shared/errors.ts';
 import { JPEG_BYTES, PDF_BYTES, PNG_BYTES, WEBP_BYTES } from '../../test/image-fixtures.ts';
+import { InMemoryDocumentFileRepository } from '../../test/in-memory-document-file.repository.ts';
+import { InMemoryDocumentRepository } from '../../test/in-memory-document.repository.ts';
 import { InMemoryExpenseAttachmentRepository } from '../../test/in-memory-expense-attachment.repository.ts';
 import { InMemoryExpenseRepository } from '../../test/in-memory-expense.repository.ts';
 import { InMemoryFuelLogRepository } from '../../test/in-memory-fuel-log.repository.ts';
+import { InMemoryNotificationRepository } from '../../test/in-memory-notification.repository.ts';
 import { InMemoryOdometerReadingRepository } from '../../test/in-memory-odometer.repository.ts';
 import { InMemoryServiceIntervalRepository } from '../../test/in-memory-service-interval.repository.ts';
 import { InMemoryServiceInvoiceRepository } from '../../test/in-memory-service-invoice.repository.ts';
@@ -53,6 +56,7 @@ async function validationDetails(promise: Promise<unknown>): Promise<unknown> {
 describe('ExpenseService', () => {
   let expenses: InMemoryExpenseRepository;
   let attachments: InMemoryExpenseAttachmentRepository;
+  let notifications: InMemoryNotificationRepository;
   let vehicleService: VehicleService;
   let service: ExpenseService;
   let vehicleId: string;
@@ -61,6 +65,7 @@ describe('ExpenseService', () => {
     const vehicles = new InMemoryVehicleRepository();
     expenses = new InMemoryExpenseRepository();
     attachments = new InMemoryExpenseAttachmentRepository();
+    notifications = new InMemoryNotificationRepository();
     vehicleService = new VehicleService({
       vehicles,
       photos: new InMemoryVehiclePhotoRepository(),
@@ -71,12 +76,16 @@ describe('ExpenseService', () => {
       fuelLogs: new InMemoryFuelLogRepository(),
       expenses,
       expenseAttachments: attachments,
+      documents: new InMemoryDocumentRepository(),
+      documentFiles: new InMemoryDocumentFileRepository(),
+      notifications,
       catalog: new VehicleCatalog(VEHICLE_CATALOG),
       now: () => NOW,
     });
     service = new ExpenseService({
       expenses,
       attachments,
+      notifications,
       vehicles: vehicleService,
       now: () => NOW,
     });
@@ -167,7 +176,10 @@ describe('ExpenseService', () => {
       const middle = await create('2026-05-01T00:00:00Z');
       const sameDayLater = await create('2026-05-01T00:00:00Z');
       const newest = await create('2026-09-01T00:00:00Z');
-      await service.uploadAttachment(ALICE, vehicleId, middle, { fileName: 'a.pdf', data: PDF_BYTES });
+      await service.uploadAttachment(ALICE, vehicleId, middle, {
+        fileName: 'a.pdf',
+        data: PDF_BYTES,
+      });
 
       const list = await service.list(ALICE, vehicleId);
 
@@ -316,6 +328,30 @@ describe('ExpenseService', () => {
       expect(attachments.attachments.size).toBe(0);
     });
 
+    it("deletes the expense's notifications only", async () => {
+      const removed = await service.create(ALICE, vehicleId, expenseInput());
+      const kept = await service.create(ALICE, vehicleId, expenseInput());
+      const notificationOf = (refId: string) => ({
+        userId: ALICE,
+        key: `expense:${refId}`,
+        kind: 'expense_expiry' as const,
+        vehicleId,
+        refId,
+        subject: 'بیمه شخص ثالث',
+        dueKm: null,
+        remainingKm: null,
+        mileageKm: null,
+        expiresAt: NOW,
+        thresholdDays: 7,
+        createdAt: NOW,
+      });
+      await notifications.createMany([notificationOf(removed.id), notificationOf(kept.id)]);
+
+      await service.remove(ALICE, vehicleId, removed.id);
+
+      expect([...notifications.notifications.values()].map((n) => n.refId)).toEqual([kept.id]);
+    });
+
     it('returns 404 for an unknown id', async () => {
       await expect(service.remove(ALICE, vehicleId, '0'.repeat(24))).rejects.toBeInstanceOf(
         NotFoundError,
@@ -388,7 +424,10 @@ describe('ExpenseService', () => {
     });
 
     it('deleteAttachment removes it and is idempotent', async () => {
-      await service.uploadAttachment(ALICE, vehicleId, expenseId, { fileName: 'a', data: PDF_BYTES });
+      await service.uploadAttachment(ALICE, vehicleId, expenseId, {
+        fileName: 'a',
+        data: PDF_BYTES,
+      });
 
       const expense = await service.deleteAttachment(ALICE, vehicleId, expenseId);
       const again = await service.deleteAttachment(ALICE, vehicleId, expenseId);

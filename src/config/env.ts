@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { z } from 'zod';
+import { ENCRYPTION_KEY_BYTES } from '../lib/file-crypto.ts';
 
 /** The value shipped in `.env.example`. Booting with it would make every JWT forgeable. */
 export const JWT_SECRET_PLACEHOLDER = 'change-me-to-a-random-string-of-32-plus-chars';
@@ -11,6 +12,9 @@ function isOrigin(value: string): boolean {
     return false;
   }
 }
+
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
+const ENCRYPTION_KEY_MESSAGE = `DOCUMENT_ENCRYPTION_KEY must be base64 of ${ENCRYPTION_KEY_BYTES} bytes; generate one with \`openssl rand -base64 ${ENCRYPTION_KEY_BYTES}\``;
 
 const emptyAsUndefined = (value: unknown) => (value === '' ? undefined : value);
 
@@ -54,6 +58,14 @@ const envSchema = z
       // A unit is required: jsonwebtoken reads a bare number string as milliseconds.
       .regex(/^\d+[smhdwy]$/, 'Use a duration with a unit, like 30d, 12h or 3600s')
       .default('30d'),
+
+    // AES-256-GCM key for vehicle document files at rest. Losing it makes every stored file unreadable.
+    DOCUMENT_ENCRYPTION_KEY: z
+      .string({ required_error: ENCRYPTION_KEY_MESSAGE })
+      .trim()
+      .refine((value) => BASE64.test(value), ENCRYPTION_KEY_MESSAGE)
+      .transform((value) => Buffer.from(value, 'base64'))
+      .refine((key) => key.byteLength === ENCRYPTION_KEY_BYTES, ENCRYPTION_KEY_MESSAGE),
 
     SMS_PROVIDER: z.enum(['console', 'kavenegar']).default('console'),
     KAVENEGAR_API_KEY: z.string().default(''),

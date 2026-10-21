@@ -15,6 +15,10 @@ import type { TokenService } from './modules/auth/token.service.ts';
 import type { UserRepository } from './modules/auth/user.repository.ts';
 import { dashboardRoutes } from './modules/dashboard/dashboard.routes.ts';
 import { DashboardService } from './modules/dashboard/dashboard.service.ts';
+import type { DocumentFileRepository } from './modules/documents/document-file.repository.ts';
+import type { DocumentRepository } from './modules/documents/document.repository.ts';
+import { documentRoutes } from './modules/documents/document.routes.ts';
+import { DocumentService } from './modules/documents/document.service.ts';
 import type { ExpenseAttachmentRepository } from './modules/expenses/expense-attachment.repository.ts';
 import type { ExpenseRepository } from './modules/expenses/expense.repository.ts';
 import { expenseRoutes } from './modules/expenses/expense.routes.ts';
@@ -24,6 +28,9 @@ import { fuelLogRoutes } from './modules/fuel-logs/fuel-log.routes.ts';
 import { FuelLogService } from './modules/fuel-logs/fuel-log.service.ts';
 import { historyRoutes } from './modules/history/history.routes.ts';
 import { HistoryService } from './modules/history/history.service.ts';
+import type { NotificationRepository } from './modules/notifications/notification.repository.ts';
+import { notificationRoutes } from './modules/notifications/notification.routes.ts';
+import { NotificationService } from './modules/notifications/notification.service.ts';
 import { profileRoutes } from './modules/profile/profile.routes.ts';
 import { ProfileService } from './modules/profile/profile.service.ts';
 import { SERVICE_INTERVALS } from './modules/service-intervals/service-interval.data.ts';
@@ -66,6 +73,13 @@ export interface AppDependencies {
   expenseAttachmentRepository: ExpenseAttachmentRepository;
   /** Largest accepted expense attachment upload, in bytes. */
   expenseAttachmentMaxBytes: number;
+  documentRepository: DocumentRepository;
+  documentFileRepository: DocumentFileRepository;
+  /** Largest accepted document file upload, in bytes. */
+  documentFileMaxBytes: number;
+  /** AES-256-GCM key (32 bytes) for document files at rest. */
+  documentEncryptionKey: Uint8Array;
+  notificationRepository: NotificationRepository;
   userRepository: UserRepository;
   avatarRepository: AvatarRepository;
   /** Largest accepted avatar upload, in bytes. */
@@ -126,6 +140,9 @@ export function createApp(deps: AppDependencies): Express {
     fuelLogs: deps.fuelLogRepository,
     expenses: deps.expenseRepository,
     expenseAttachments: deps.expenseAttachmentRepository,
+    documents: deps.documentRepository,
+    documentFiles: deps.documentFileRepository,
+    notifications: deps.notificationRepository,
     catalog: vehicleCatalog,
     now: deps.now,
   });
@@ -161,7 +178,23 @@ export function createApp(deps: AppDependencies): Express {
   const expenseService = new ExpenseService({
     expenses: deps.expenseRepository,
     attachments: deps.expenseAttachmentRepository,
+    notifications: deps.notificationRepository,
     vehicles: vehicleService,
+    now: deps.now,
+  });
+  const documentService = new DocumentService({
+    documents: deps.documentRepository,
+    files: deps.documentFileRepository,
+    notifications: deps.notificationRepository,
+    vehicles: vehicleService,
+    encryptionKey: deps.documentEncryptionKey,
+  });
+  const notificationService = new NotificationService({
+    notifications: deps.notificationRepository,
+    vehicles: vehicleService,
+    intervals: serviceIntervalService,
+    expenses: deps.expenseRepository,
+    documents: deps.documentRepository,
     now: deps.now,
   });
   const historyService = new HistoryService({
@@ -182,11 +215,13 @@ export function createApp(deps: AppDependencies): Express {
   const profileService = new ProfileService({
     vehicles: vehicleService,
     visits: deps.serviceVisitRepository,
+    documents: deps.documentRepository,
   });
   app.use('/api/service-suggestions', authenticate, serviceSuggestionRoutes(serviceVisitService));
   app.use('/api/history', authenticate, historyRoutes(historyService));
   app.use('/api/dashboard', authenticate, dashboardRoutes(dashboardService));
   app.use('/api/profile', authenticate, profileRoutes(profileService));
+  app.use('/api/notifications', authenticate, notificationRoutes(notificationService));
   app.use(
     '/api/vehicles',
     authenticate,
@@ -196,6 +231,7 @@ export function createApp(deps: AppDependencies): Express {
     serviceIntervalRoutes(serviceIntervalService),
     fuelLogRoutes(fuelLogService),
     expenseRoutes(expenseService, deps.expenseAttachmentMaxBytes),
+    documentRoutes(documentService, deps.documentFileMaxBytes),
   );
 
   app.use(notFoundHandler);

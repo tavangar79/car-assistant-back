@@ -1,4 +1,5 @@
 import type { AppDependencies } from '../app.ts';
+import type { NewDocument } from '../modules/documents/document.types.ts';
 import type { NewExpense } from '../modules/expenses/expense.types.ts';
 import type { NewFuelLog } from '../modules/fuel-logs/fuel-log.types.ts';
 import type { ServiceLineItem } from '../modules/service-visits/service-visit.types.ts';
@@ -6,9 +7,12 @@ import { VEHICLE_CATALOG } from '../modules/vehicle-catalog/vehicle-catalog.data
 import { VehicleCatalog } from '../modules/vehicle-catalog/vehicle-catalog.ts';
 import { VehicleService } from '../modules/vehicles/vehicle.service.ts';
 import { JPEG_BYTES, PDF_BYTES } from './image-fixtures.ts';
+import { InMemoryDocumentFileRepository } from './in-memory-document-file.repository.ts';
+import { InMemoryDocumentRepository } from './in-memory-document.repository.ts';
 import { InMemoryExpenseAttachmentRepository } from './in-memory-expense-attachment.repository.ts';
 import { InMemoryExpenseRepository } from './in-memory-expense.repository.ts';
 import { InMemoryFuelLogRepository } from './in-memory-fuel-log.repository.ts';
+import { InMemoryNotificationRepository } from './in-memory-notification.repository.ts';
 import { InMemoryOdometerReadingRepository } from './in-memory-odometer.repository.ts';
 import { InMemoryServiceIntervalRepository } from './in-memory-service-interval.repository.ts';
 import { InMemoryServiceInvoiceRepository } from './in-memory-service-invoice.repository.ts';
@@ -41,6 +45,9 @@ export function createGarage(now: Date) {
     fuelLogRepository: new InMemoryFuelLogRepository(),
     expenseRepository: new InMemoryExpenseRepository(),
     expenseAttachmentRepository: new InMemoryExpenseAttachmentRepository(),
+    documentRepository: new InMemoryDocumentRepository(),
+    documentFileRepository: new InMemoryDocumentFileRepository(),
+    notificationRepository: new InMemoryNotificationRepository(),
   } satisfies Partial<AppDependencies>;
 
   const vehicleService = new VehicleService({
@@ -53,6 +60,9 @@ export function createGarage(now: Date) {
     fuelLogs: repositories.fuelLogRepository,
     expenses: repositories.expenseRepository,
     expenseAttachments: repositories.expenseAttachmentRepository,
+    documents: repositories.documentRepository,
+    documentFiles: repositories.documentFileRepository,
+    notifications: repositories.notificationRepository,
     catalog: new VehicleCatalog(VEHICLE_CATALOG),
     now: () => now,
   });
@@ -149,6 +159,22 @@ export function createGarage(now: Date) {
         });
       }
       return expense.id;
+    },
+
+    async addDocument(vehicleId: string, overrides: Partial<NewDocument> = {}): Promise<string> {
+      const document = await repositories.documentRepository.create({
+        vehicleId,
+        type: 'third_party_insurance',
+        title: null,
+        issuer: null,
+        number: null,
+        issuedAt: null,
+        expiresAt: null,
+        expiryReminder: true,
+        notes: null,
+        ...overrides,
+      });
+      return document.id;
     },
   };
 }

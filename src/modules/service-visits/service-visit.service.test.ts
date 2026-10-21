@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { NotFoundError, ValidationError } from '../../shared/errors.ts';
 import { JPEG_BYTES, PNG_BYTES, WEBP_BYTES } from '../../test/image-fixtures.ts';
+import { InMemoryDocumentFileRepository } from '../../test/in-memory-document-file.repository.ts';
+import { InMemoryDocumentRepository } from '../../test/in-memory-document.repository.ts';
 import { InMemoryExpenseAttachmentRepository } from '../../test/in-memory-expense-attachment.repository.ts';
 import { InMemoryExpenseRepository } from '../../test/in-memory-expense.repository.ts';
 import { InMemoryFuelLogRepository } from '../../test/in-memory-fuel-log.repository.ts';
+import { InMemoryNotificationRepository } from '../../test/in-memory-notification.repository.ts';
 import { InMemoryOdometerReadingRepository } from '../../test/in-memory-odometer.repository.ts';
 import { InMemoryServiceIntervalRepository } from '../../test/in-memory-service-interval.repository.ts';
 import { InMemoryServiceInvoiceRepository } from '../../test/in-memory-service-invoice.repository.ts';
@@ -82,6 +85,9 @@ describe('ServiceVisitService', () => {
       fuelLogs: new InMemoryFuelLogRepository(),
       expenses: new InMemoryExpenseRepository(),
       expenseAttachments: new InMemoryExpenseAttachmentRepository(),
+      documents: new InMemoryDocumentRepository(),
+      documentFiles: new InMemoryDocumentFileRepository(),
+      notifications: new InMemoryNotificationRepository(),
       catalog: new VehicleCatalog(VEHICLE_CATALOG),
       now: () => NOW,
     });

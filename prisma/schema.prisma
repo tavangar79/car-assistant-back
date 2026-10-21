@@ -181,6 +181,72 @@ model ExpenseAttachment {
   @@map("expense_attachments")
 }
 
+// A vehicle document (insurance, inspection, card, ...). `expiresAt` null = permanent. Deleted with the vehicle.
+model VehicleDocument {
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  vehicleId      String    @db.ObjectId
+  /// third_party_insurance | body_insurance | inspection | vehicle_card | green_sheet | power_of_attorney
+  type           String
+  title          String?
+  issuer         String?
+  /// Policy / serial / VIN.
+  number         String?
+  issuedAt       DateTime?
+  expiresAt      DateTime?
+  expiryReminder Boolean   @default(true)
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([vehicleId])
+  @@map("vehicle_documents")
+}
+
+// Up to 4 files per document (checked by DocumentService). Bytes are encrypted at rest.
+model VehicleDocumentFile {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  documentId  String   @db.ObjectId
+  fileName    String
+  /// application/pdf | image/jpeg | image/png
+  contentType String
+  /// Plaintext size.
+  sizeBytes   Int
+  /// AES-256-GCM: iv(12) | authTag(16) | ciphertext.
+  data        Bytes
+  createdAt   DateTime @default(now())
+
+  @@index([documentId])
+  @@map("vehicle_document_files")
+}
+
+// An in-app notification, generated lazily on read by NotificationService.sync. `key` makes generation idempotent.
+// Rows older than 90 days are deleted on sync.
+model Notification {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String    @db.ObjectId
+  vehicleId     String    @db.ObjectId
+  key           String
+  /// interval_due_soon | interval_overdue | expense_expiry | document_expiry
+  kind          String
+  /// intervalId, expenseId or documentId.
+  refId         String
+  /// Snapshot title (Persian).
+  subject       String
+  dueKm         Int?
+  remainingKm   Int?
+  mileageKm     Int?
+  /// Expiry kinds: the expiry; interval kinds: the due date.
+  expiresAt     DateTime?
+  /// Expiry kinds: 30 | 15 | 7.
+  thresholdDays Int?
+  readAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@unique([userId, key])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
 // A vehicle's override of one service interval. Only overrides are stored; a missing row means factory default.
 model ServiceInterval {
   id         String   @id @default(auto()) @map("_id") @db.ObjectId

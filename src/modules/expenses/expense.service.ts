@@ -1,5 +1,6 @@
 import { NotFoundError, ValidationError } from '../../shared/errors.ts';
 import { detectFileType, type FileContentType } from '../../shared/file-type.ts';
+import type { NotificationRepository } from '../notifications/notification.repository.ts';
 import { FUTURE_TOLERANCE_MS } from '../vehicles/odometer.service.ts';
 import type { VehicleService } from '../vehicles/vehicle.service.ts';
 import type { ExpenseAttachmentRepository } from './expense-attachment.repository.ts';
@@ -16,6 +17,8 @@ import type {
 export interface ExpenseServiceDeps {
   expenses: ExpenseRepository;
   attachments: ExpenseAttachmentRepository;
+  /** A deleted expense's notifications go too. */
+  notifications: NotificationRepository;
   /** Ownership checks come from here. Expenses never touch the vehicle's mileage. */
   vehicles: VehicleService;
   now: () => Date;
@@ -124,10 +127,11 @@ export class ExpenseService {
     return this.withAttachment(expense);
   }
 
-  /** Deletes the attachment too. */
+  /** Deletes the attachment and notifications too. */
   async remove(userId: string, vehicleId: string, expenseId: string): Promise<void> {
     const expense = await this.findOwned(userId, vehicleId, expenseId);
     await this.deps.attachments.deleteByExpenseIds([expense.id]);
+    await this.deps.notifications.deleteByRefIds([expense.id]);
     await this.deps.expenses.delete(expense.id);
   }
 

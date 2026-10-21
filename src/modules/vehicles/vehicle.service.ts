@@ -1,8 +1,11 @@
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../../shared/errors.ts';
 import { detectImageType, type ImageContentType } from '../../shared/image-type.ts';
+import type { DocumentFileRepository } from '../documents/document-file.repository.ts';
+import type { DocumentRepository } from '../documents/document.repository.ts';
 import type { ExpenseAttachmentRepository } from '../expenses/expense-attachment.repository.ts';
 import type { ExpenseRepository } from '../expenses/expense.repository.ts';
 import type { FuelLogRepository } from '../fuel-logs/fuel-log.repository.ts';
+import type { NotificationRepository } from '../notifications/notification.repository.ts';
 import type { ServiceIntervalRepository } from '../service-intervals/service-interval.repository.ts';
 import type { ServiceInvoiceRepository } from '../service-visits/service-invoice.repository.ts';
 import type { ServiceVisitRepository } from '../service-visits/service-visit.repository.ts';
@@ -31,6 +34,9 @@ export interface VehicleServiceDeps {
   fuelLogs: FuelLogRepository;
   expenses: ExpenseRepository;
   expenseAttachments: ExpenseAttachmentRepository;
+  documents: DocumentRepository;
+  documentFiles: DocumentFileRepository;
+  notifications: NotificationRepository;
   catalog: VehicleCatalog;
   now: () => Date;
 }
@@ -143,7 +149,7 @@ export class VehicleService {
 
   /**
    * Deletes the photo, odometer readings, service visits (with invoices), interval overrides,
-   * fuel logs and expenses (with attachments) too. If the default goes, the newest remaining
+   * fuel logs, expenses (with attachments), documents (with files) and notifications too. If the default goes, the newest remaining
    * vehicle becomes default.
    */
   async remove(userId: string, id: string): Promise<void> {
@@ -157,6 +163,9 @@ export class VehicleService {
       fuelLogs,
       expenses,
       expenseAttachments,
+      documents,
+      documentFiles,
+      notifications,
     } = this.deps;
     const existing = await this.findOwned(userId, id);
     await photos.delete(existing.id);
@@ -167,6 +176,9 @@ export class VehicleService {
     await fuelLogs.deleteByVehicle(existing.id);
     const expenseIds = await expenses.deleteByVehicle(existing.id);
     await expenseAttachments.deleteByExpenseIds(expenseIds);
+    const documentIds = await documents.deleteByVehicle(existing.id);
+    await documentFiles.deleteByDocumentIds(documentIds);
+    await notifications.deleteByVehicle(existing.id);
     await vehicles.deleteAndPromote(userId, existing.id);
   }
 
