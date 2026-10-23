@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../app.ts';
 import { createTestDependencies, TEST_JWT_SECRET } from '../../test/test-dependencies.ts';
 import { TokenService } from '../auth/token.service.ts';
-import { SERVICE_INTERVALS } from './service-interval.data.ts';
+import { SEED_INTERVALS } from '../../scripts/catalog-seed.data.ts';
 
 const tokens = new TokenService(TEST_JWT_SECRET, '30d');
 const ALICE = `Bearer ${tokens.sign('aaaaaaaaaaaaaaaaaaaaaaaa')}`;
@@ -65,7 +65,7 @@ describe('/api/vehicles/:id/intervals and /due', () => {
       const res = await request(app).get(intervalsPath).set('Authorization', ALICE).expect(200);
 
       expect(res.body.intervals.map((i: { id: string }) => i.id)).toEqual(
-        SERVICE_INTERVALS.map((d) => d.id),
+        SEED_INTERVALS.map((d) => d.intervalId),
       );
       expect(res.body.intervals[0]).toEqual(DEFAULT_ENGINE_OIL);
     });

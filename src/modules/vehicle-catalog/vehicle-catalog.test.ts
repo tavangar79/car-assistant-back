@@ -64,6 +64,35 @@ describe('VehicleCatalog', () => {
     });
   });
 
+  describe('checkScope', () => {
+    const scope = (makeId: string | null, modelId: string | null, trimId: string | null) => ({
+      makeId,
+      modelId,
+      trimId,
+    });
+
+    it.each([
+      [scope(null, null, null)],
+      [scope('iran-khodro', null, null)],
+      [scope('iran-khodro', 'tara', null)],
+      [scope('iran-khodro', 'tara', 'tara-v4-at')],
+    ])('accepts %j', (value) => {
+      expect(catalog.checkScope(value)).toEqual([]);
+    });
+
+    it.each([
+      [scope(null, 'tara', null), 'modelId requires makeId'],
+      [scope('iran-khodro', null, 'tara-v4-at'), 'trimId requires modelId'],
+      [scope('nope', null, null), 'Unknown make'],
+      [scope('iran-khodro', 'nope', null), 'Unknown model'],
+      [scope('saipa', 'tara', null), 'Model does not belong to the make'],
+      [scope('iran-khodro', 'tara', 'nope'), 'Unknown trim'],
+      [scope('iran-khodro', 'tara', 'dena-plus-mt'), 'Trim does not belong to the model'],
+    ])('rejects %j', (value, message) => {
+      expect(catalog.checkScope(value)).toEqual([message]);
+    });
+  });
+
   describe('resolve', () => {
     it('returns the display names', () => {
       expect(

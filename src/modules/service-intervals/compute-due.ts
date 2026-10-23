@@ -1,4 +1,4 @@
-import type { ServiceIntervalDefinition } from './service-interval.data.ts';
+import type { ServiceIntervalDefinition } from './service-interval.types.ts';
 
 export type DueStatus = 'overdue' | 'due_soon' | 'upcoming' | 'ok';
 

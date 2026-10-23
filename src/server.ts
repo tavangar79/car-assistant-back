@@ -16,10 +16,15 @@ import { PrismaExpenseRepository } from './modules/expenses/expense.repository.t
 import { EXPENSE_ATTACHMENT_MAX_BYTES } from './modules/expenses/expense.routes.ts';
 import { PrismaFuelLogRepository } from './modules/fuel-logs/fuel-log.repository.ts';
 import { PrismaNotificationRepository } from './modules/notifications/notification.repository.ts';
+import { REPORT_MAX_ENTRIES } from './modules/reports/report.service.ts';
+import { seedEmptyCatalog } from './modules/service-catalog/catalog-seed.ts';
+import { PrismaIntervalDefRepository } from './modules/service-catalog/interval-def.repository.ts';
+import { PrismaServiceItemDefRepository } from './modules/service-catalog/service-item-def.repository.ts';
 import { PrismaServiceIntervalRepository } from './modules/service-intervals/service-interval.repository.ts';
 import { PrismaServiceInvoiceRepository } from './modules/service-visits/service-invoice.repository.ts';
 import { PrismaServiceVisitRepository } from './modules/service-visits/service-visit.repository.ts';
 import { SERVICE_INVOICE_MAX_BYTES } from './modules/service-visits/service-visit.routes.ts';
+import { PrismaTransferRepository } from './modules/transfers/transfer.repository.ts';
 import { PrismaOdometerReadingRepository } from './modules/vehicles/odometer.repository.ts';
 import { PrismaVehiclePhotoRepository } from './modules/vehicles/vehicle-photo.repository.ts';
 import { PrismaVehicleRepository } from './modules/vehicles/vehicle.repository.ts';
@@ -27,6 +32,10 @@ import { VEHICLE_PHOTO_MAX_BYTES } from './modules/vehicles/vehicle.routes.ts';
 
 const env = loadEnv();
 const prisma = createPrismaClient();
+const serviceItemDefRepository = new PrismaServiceItemDefRepository(prisma);
+const intervalDefRepository = new PrismaIntervalDefRepository(prisma);
+// A fresh environment gets the factory catalog without a manual `npm run catalog:seed`.
+await seedEmptyCatalog(serviceItemDefRepository, intervalDefRepository);
 
 const app = createApp({
   vehicleRepository: new PrismaVehicleRepository(prisma),
@@ -37,6 +46,8 @@ const app = createApp({
   serviceInvoiceRepository: new PrismaServiceInvoiceRepository(prisma),
   serviceInvoiceMaxBytes: SERVICE_INVOICE_MAX_BYTES,
   serviceIntervalRepository: new PrismaServiceIntervalRepository(prisma),
+  serviceItemDefRepository,
+  intervalDefRepository,
   fuelLogRepository: new PrismaFuelLogRepository(prisma),
   expenseRepository: new PrismaExpenseRepository(prisma),
   expenseAttachmentRepository: new PrismaExpenseAttachmentRepository(prisma),
@@ -46,6 +57,8 @@ const app = createApp({
   documentFileMaxBytes: DOCUMENT_FILE_MAX_BYTES,
   documentEncryptionKey: env.DOCUMENT_ENCRYPTION_KEY,
   notificationRepository: new PrismaNotificationRepository(prisma),
+  transferRepository: new PrismaTransferRepository(prisma),
+  reportMaxEntries: REPORT_MAX_ENTRIES,
   userRepository: new PrismaUserRepository(prisma),
   avatarRepository: new PrismaAvatarRepository(prisma),
   avatarMaxBytes: AVATAR_MAX_BYTES,

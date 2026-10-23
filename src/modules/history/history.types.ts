@@ -3,9 +3,10 @@ import type { Expense } from '../expenses/expense.types.ts';
 import type { FuelLog } from '../fuel-logs/fuel-log.types.ts';
 import type { ServiceVisit } from '../service-visits/service-visit.types.ts';
 
-export const HISTORY_TYPES = ['all', 'service', 'fuel', 'expense'] as const;
+export const HISTORY_ENTRY_TYPES = ['service', 'fuel', 'expense'] as const;
+export type HistoryEntryType = (typeof HISTORY_ENTRY_TYPES)[number];
+export const HISTORY_TYPES = ['all', ...HISTORY_ENTRY_TYPES] as const;
 export type HistoryTypeFilter = (typeof HISTORY_TYPES)[number];
-export type HistoryEntryType = Exclude<HistoryTypeFilter, 'all'>;
 
 /** The 6 service-item catalog categories, plus `legal` for every expense that isn't `other`. */
 export const HISTORY_CATEGORIES = [
@@ -46,7 +47,7 @@ export function decodeCursor(cursor: string): HistoryCursor | null {
 }
 
 /** `a,b,,c` → `['a', 'b', 'c']`; an empty list counts as absent. */
-const commaList = z
+export const commaList = z
   .string()
   .transform((value) =>
     value
@@ -59,10 +60,17 @@ const commaList = z
 const isCategory = (value: string): value is HistoryCategory =>
   (HISTORY_CATEGORIES as readonly string[]).includes(value);
 
-const isoDate = z
+export const isoDate = z
   .string()
   .datetime({ offset: true })
   .transform((value) => new Date(value));
+
+/** `from > to` → 400 `details.from`. */
+export function fromNotAfterTo(query: { from?: Date; to?: Date }, ctx: z.RefinementCtx): void {
+  if (query.from && query.to && query.from > query.to) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['from'], message: 'Must not be after to' });
+  }
+}
 
 // Query strings only: every value arrives as a string.
 export const historyQuerySchema = z
@@ -92,15 +100,7 @@ export const historyQuerySchema = z
       .optional(),
     limit: z.coerce.number().int().min(1).max(HISTORY_MAX_LIMIT).default(HISTORY_DEFAULT_LIMIT),
   })
-  .superRefine((query, ctx) => {
-    if (query.from && query.to && query.from > query.to) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['from'],
-        message: 'Must not be after to',
-      });
-    }
-  });
+  .superRefine(fromNotAfterTo);
 
 export type HistoryQuery = z.infer<typeof historyQuerySchema>;
 

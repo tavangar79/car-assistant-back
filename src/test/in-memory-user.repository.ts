@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import type { UpdateProfileInput, User } from '../modules/auth/auth.types.ts';
+import type { UpdateProfileInput, User, UserRole } from '../modules/auth/auth.types.ts';
 import type { UserRepository } from '../modules/auth/user.repository.ts';
 
 export class InMemoryUserRepository implements UserRepository {
@@ -21,6 +21,7 @@ export class InMemoryUserRepository implements UserRepository {
       firstName: null,
       lastName: null,
       birthDate: null,
+      role: 'user',
       createdAt: now,
       updatedAt: now,
     };
@@ -32,6 +33,14 @@ export class InMemoryUserRepository implements UserRepository {
     const existing = this.users.get(id);
     if (!existing) throw new Error(`User ${id} not found`);
     const user: User = { ...existing, ...profile, updatedAt: new Date() };
+    this.users.set(id, user);
+    return user;
+  }
+
+  async setRole(id: string, role: UserRole): Promise<User> {
+    const existing = this.users.get(id);
+    if (!existing) throw new Error(`User ${id} not found`);
+    const user: User = { ...existing, role, updatedAt: new Date() };
     this.users.set(id, user);
     return user;
   }

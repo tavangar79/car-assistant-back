@@ -106,6 +106,7 @@ describe('FuelLogService', () => {
         paymentMethod: null,
         notes: null,
         economy: null,
+        locked: false,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date),
       });

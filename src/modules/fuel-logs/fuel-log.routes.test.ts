@@ -76,6 +76,7 @@ describe('/api/vehicles/:id/fuel', () => {
           vehicleId,
           ...logBody,
           economy: null,
+          locked: false,
           createdAt: ISO_DATE,
           updatedAt: ISO_DATE,
         },
@@ -163,8 +164,16 @@ describe('/api/vehicles/:id/fuel', () => {
 
   describe('GET list', () => {
     it('returns the logs newest fueledAt first', async () => {
-      const older = await create({ ...logBody, fueledAt: '2026-01-01T00:00:00Z', odometerKm: 1000 });
-      const newer = await create({ ...logBody, fueledAt: '2026-09-01T00:00:00Z', odometerKm: 1000 });
+      const older = await create({
+        ...logBody,
+        fueledAt: '2026-01-01T00:00:00Z',
+        odometerKm: 1000,
+      });
+      const newer = await create({
+        ...logBody,
+        fueledAt: '2026-09-01T00:00:00Z',
+        odometerKm: 1000,
+      });
 
       const res = await request(app).get(path).set('Authorization', ALICE).expect(200);
 

@@ -29,6 +29,9 @@ by the car-assistant manager repo, whose CTO sends tasks with an API contract.
 | Tests             | `npm test`                                   |
 | Types / lint      | `npm run typecheck` · `npm run lint`         |
 | Build             | `npm run build`                              |
+| Seed catalog      | `npm run catalog:seed` (adds missing global rows only) |
+| Grant admin       | `npm run admin:grant -- <phone>`             |
+| Revoke admin      | `npm run admin:revoke -- <phone>`            |
 
 **Definition of done:** `npm test && npm run typecheck && npm run lint` all pass.
 

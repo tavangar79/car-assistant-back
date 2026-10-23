@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { NotFoundError } from '../../shared/errors.ts';
 import { parseOrThrow } from '../../shared/validate.ts';
 import { createGarage, type Garage } from '../../test/garage-fixture.ts';
-import { SERVICE_ITEMS } from '../service-items/service-items.data.ts';
 import { ServiceItemCatalog } from '../service-items/service-items.ts';
 import { HistoryService } from './history.service.ts';
 import { historyQuerySchema, type HistoryEntry } from './history.types.ts';
@@ -30,7 +29,10 @@ describe('HistoryService', () => {
       fuelLogs: r.fuelLogRepository,
       expenses: r.expenseRepository,
       attachments: r.expenseAttachmentRepository,
-      items: new ServiceItemCatalog(SERVICE_ITEMS),
+      items: new ServiceItemCatalog({
+        definitions: r.serviceItemDefRepository,
+        vehicles: garage.vehicleService,
+      }),
     });
     car = await garage.addVehicle(ALICE);
   });

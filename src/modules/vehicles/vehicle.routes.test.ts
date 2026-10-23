@@ -74,6 +74,7 @@ describe('/api/vehicles', () => {
         color: 'white',
         isDefault: true,
         photoUrl: null,
+        ownedSince: null,
         createdAt: ISO_DATE,
         updatedAt: ISO_DATE,
       });

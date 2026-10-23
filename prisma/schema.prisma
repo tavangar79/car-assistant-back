@@ -26,11 +26,32 @@ model Vehicle {
   mileageKm  Int
   color      VehicleColor?
   isDefault  Boolean       @default(false)
+  /// Set when an ownership transfer is accepted; null = owned since createdAt.
+  /// Service visits, fuel logs and expenses created before it are locked for the new owner.
+  ownedSince DateTime?
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 
   @@index([userId])
   @@map("vehicles")
+}
+
+// A seller's request to hand a vehicle to the owner of `toPhone`. The vehicle moves only when the buyer accepts.
+model VehicleTransfer {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  vehicleId   String    @db.ObjectId
+  fromUserId  String    @db.ObjectId
+  /// Normalized with normalizeIranianPhone (same as login).
+  toPhone     String
+  /// pending | accepted | rejected | cancelled
+  status      String
+  createdAt   DateTime  @default(now())
+  respondedAt DateTime?
+
+  @@index([vehicleId])
+  @@index([toPhone, status])
+  @@index([fromUserId, status])
+  @@map("vehicle_transfers")
 }
 
 /// Iranian plate, Latin digits: 72 ب 345 - 68.
@@ -260,6 +281,54 @@ model ServiceInterval {
   @@map("service_intervals")
 }
 
+// One service item definition in one scope. All scope ids null = global; the most specific matching
+// row (trim > model > make > global) fully replaces the definition for a vehicle.
+// `itemId` is stored on service visits, so it is never renamed.
+model ServiceItemDef {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  itemId     String
+  makeId     String?
+  modelId    String?
+  trimId     String?
+  categoryId String
+  title      String
+  subtitle   String
+  /// Material Symbols icon name.
+  icon       String
+  sortOrder  Int
+  disabled   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([itemId, makeId, modelId, trimId])
+  @@map("service_item_defs")
+}
+
+// One service interval definition in one scope; resolved like ServiceItemDef.
+// `intervalId` is stored on ServiceInterval overrides, so it is never renamed.
+model IntervalDef {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  intervalId    String
+  makeId        String?
+  modelId       String?
+  trimId        String?
+  title         String
+  description   String
+  icon          String
+  coversItemIds String[]
+  /// Default km, 500..200000.
+  km            Int
+  /// Default months, 1..120.
+  months        Int
+  sortOrder     Int
+  disabled      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([intervalId, makeId, modelId, trimId])
+  @@map("interval_defs")
+}
+
 model User {
   id        String    @id @default(auto()) @map("_id") @db.ObjectId
   phone     String    @unique
@@ -267,6 +336,8 @@ model User {
   lastName  String?
   /// UTC midnight of the Gregorian birth date.
   birthDate DateTime?
+  /// user | admin. Granted with `npm run admin:grant -- <phone>`.
+  role      String    @default("user")
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 

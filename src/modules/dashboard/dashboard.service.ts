@@ -25,8 +25,9 @@ export class DashboardService {
 
   async get(userId: string): Promise<Dashboard> {
     const now = this.deps.now();
-    const vehicleIds = (await this.deps.vehicles.list(userId)).map((vehicle) => vehicle.id);
-    const entries = await this.deps.history.entriesOf(vehicleIds);
+    const garage = await this.deps.vehicles.list(userId);
+    const vehicleIds = garage.map((vehicle) => vehicle.id);
+    const entries = await this.deps.history.entriesOf(garage);
 
     const yearStart = jalaliYearStart(now);
     const thisYear = entries.filter(

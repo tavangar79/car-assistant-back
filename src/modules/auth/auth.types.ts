@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { normalizeIranianPhone, toAsciiDigits } from './phone.ts';
 
-const phoneSchema = z.string().transform((value, ctx) => {
+/** An Iranian mobile number, normalized to `09xxxxxxxxx` (400 when invalid). */
+export const phoneSchema = z.string().transform((value, ctx) => {
   const phone = normalizeIranianPhone(value);
   if (!phone) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid Iranian mobile number' });
@@ -96,9 +97,14 @@ export interface User {
   lastName: string | null;
   /** UTC midnight of the Gregorian birth date. */
   birthDate: Date | null;
+  /** `user` or `admin` (see `USER_ROLES`). Not part of the public profile. */
+  role: string;
   createdAt: Date;
   updatedAt: Date;
 }
+
+export const USER_ROLES = ['user', 'admin'] as const;
+export type UserRole = (typeof USER_ROLES)[number];
 
 export interface OtpCode {
   phone: string;

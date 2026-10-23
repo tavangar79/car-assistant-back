@@ -97,4 +97,6 @@ export interface ServiceVisit extends ServiceVisitRecord {
   invoice: ServiceInvoiceMeta | null;
   /** `/api/vehicles/:id/services/:serviceId/invoice?v=<updatedAt ms>`, or null without an invoice. */
   invoiceUrl: string | null;
+  /** Created by a previous owner: read-only (see record-lock.ts). */
+  locked: boolean;
 }

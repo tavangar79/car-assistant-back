@@ -81,6 +81,7 @@ describe('/api/vehicles/:id/expenses', () => {
           ...expenseBody,
           attachment: null,
           attachmentUrl: null,
+          locked: false,
           createdAt: ISO_DATE,
           updatedAt: ISO_DATE,
         },
@@ -158,8 +159,16 @@ describe('/api/vehicles/:id/expenses', () => {
 
   describe('GET list', () => {
     it('returns the expenses newest paidAt first', async () => {
-      const older = await create({ ...expenseBody, paidAt: '2026-01-01T00:00:00Z', expiresAt: null });
-      const newer = await create({ ...expenseBody, paidAt: '2026-09-01T00:00:00Z', expiresAt: null });
+      const older = await create({
+        ...expenseBody,
+        paidAt: '2026-01-01T00:00:00Z',
+        expiresAt: null,
+      });
+      const newer = await create({
+        ...expenseBody,
+        paidAt: '2026-09-01T00:00:00Z',
+        expiresAt: null,
+      });
 
       const res = await request(app).get(path).set('Authorization', ALICE).expect(200);
 

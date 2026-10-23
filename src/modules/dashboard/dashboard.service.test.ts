@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createGarage, type Garage } from '../../test/garage-fixture.ts';
 import { HistoryService } from '../history/history.service.ts';
-import { SERVICE_INTERVALS } from '../service-intervals/service-interval.data.ts';
 import { ServiceIntervalService } from '../service-intervals/service-interval.service.ts';
-import { SERVICE_ITEMS } from '../service-items/service-items.data.ts';
 import { ServiceItemCatalog } from '../service-items/service-items.ts';
 import { DashboardService } from './dashboard.service.ts';
 
@@ -28,10 +26,13 @@ function createDashboardService(garage: Garage, now: Date): DashboardService {
       fuelLogs: r.fuelLogRepository,
       expenses: r.expenseRepository,
       attachments: r.expenseAttachmentRepository,
-      items: new ServiceItemCatalog(SERVICE_ITEMS),
+      items: new ServiceItemCatalog({
+        definitions: r.serviceItemDefRepository,
+        vehicles: garage.vehicleService,
+      }),
     }),
     intervals: new ServiceIntervalService({
-      definitions: SERVICE_INTERVALS,
+      definitions: r.intervalDefRepository,
       overrides: r.serviceIntervalRepository,
       vehicles: garage.vehicleService,
       visits: r.serviceVisitRepository,

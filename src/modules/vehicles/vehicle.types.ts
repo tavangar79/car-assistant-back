@@ -87,12 +87,16 @@ export interface VehicleRecord {
   mileageKm: number;
   color: VehicleColor | null;
   isDefault: boolean;
+  /** Set by an accepted ownership transfer; null = owned since `createdAt`. */
+  ownedSince: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export type NewVehicle = Omit<VehicleRecord, 'id' | 'createdAt' | 'updatedAt'>;
-export type VehicleChanges = Partial<Omit<NewVehicle, 'userId'>>;
+export type VehicleChanges = Partial<Omit<NewVehicle, 'userId' | 'ownedSince'>>;
+/** What an accepted transfer changes. */
+export type VehicleOwner = Pick<VehicleRecord, 'userId' | 'ownedSince' | 'isDefault'>;
 
 /** A vehicle as exposed by the API. */
 export interface Vehicle {
@@ -109,6 +113,8 @@ export interface Vehicle {
   isDefault: boolean;
   /** `/api/vehicles/:id/photo?v=<updatedAt ms>`, or null without a photo. */
   photoUrl: string | null;
+  /** Set by an accepted ownership transfer; null = owned since `createdAt`. */
+  ownedSince: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

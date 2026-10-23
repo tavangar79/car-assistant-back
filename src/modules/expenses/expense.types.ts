@@ -76,4 +76,6 @@ export interface Expense extends ExpenseRecord {
   attachment: ExpenseAttachmentMeta | null;
   /** `/api/vehicles/:id/expenses/:expenseId/attachment?v=<updatedAt ms>`, or null without a file. */
   attachmentUrl: string | null;
+  /** Created by a previous owner: read-only (see record-lock.ts). */
+  locked: boolean;
 }

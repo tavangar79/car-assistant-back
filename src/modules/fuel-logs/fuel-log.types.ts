@@ -68,4 +68,6 @@ export type FuelLogChanges = Partial<Omit<NewFuelLog, 'vehicleId'>>;
 export interface FuelLog extends FuelLogRecord {
   /** Litres per 100 km since the previous full fill, or null when it can't be computed. */
   economy: number | null;
+  /** Created by a previous owner: read-only (see record-lock.ts). */
+  locked: boolean;
 }

@@ -1,5 +1,6 @@
 import { NotFoundError, ValidationError } from '../../shared/errors.ts';
 import { FUTURE_TOLERANCE_MS, type OdometerService } from '../vehicles/odometer.service.ts';
+import { ensureUnlocked, isLocked } from '../vehicles/record-lock.ts';
 import type { VehicleService } from '../vehicles/vehicle.service.ts';
 import type { Vehicle } from '../vehicles/vehicle.types.ts';
 import { computeEconomy } from './compute-economy.ts';
@@ -25,8 +26,16 @@ export const FUEL_LIST_LIMIT = 50;
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
 /** The API shape of a log; `economy` comes from `computeEconomy` over every log of its vehicle. */
-export function toFuelLog(log: FuelLogRecord, economy: Map<string, number | null>): FuelLog {
-  return { ...log, economy: economy.get(log.id) ?? null };
+export function toFuelLog(
+  log: FuelLogRecord,
+  economy: Map<string, number | null>,
+  ownedSince: Date | null,
+): FuelLog {
+  return {
+    ...log,
+    economy: economy.get(log.id) ?? null,
+    locked: isLocked(ownedSince, log.createdAt),
+  };
 }
 
 /** Fuel logs of a user's vehicle. Another user's vehicle or log is "not found". */
@@ -38,12 +47,12 @@ export class FuelLogService {
     const vehicle = await this.deps.vehicles.getById(userId, vehicleId);
     const logs = await this.deps.logs.listByVehicle(vehicle.id);
     const economy = computeEconomy(logs);
-    return logs.slice(0, FUEL_LIST_LIMIT).map((log) => toFuelLog(log, economy));
+    return logs.slice(0, FUEL_LIST_LIMIT).map((log) => toFuelLog(log, economy, vehicle.ownedSince));
   }
 
   async getById(userId: string, vehicleId: string, fuelLogId: string): Promise<FuelLog> {
-    const { log } = await this.findOwned(userId, vehicleId, fuelLogId);
-    return this.withEconomy(log);
+    const { vehicle, log } = await this.findOwned(userId, vehicleId, fuelLogId);
+    return this.withEconomy(log, vehicle);
   }
 
   async create(userId: string, vehicleId: string, input: CreateFuelLogInput): Promise<FuelLog> {
@@ -64,7 +73,7 @@ export class FuelLogService {
       notes: input.notes ?? null,
     });
     await this.raiseMileage(userId, vehicle, log);
-    return this.withEconomy(log);
+    return this.withEconomy(log, vehicle);
   }
 
   async update(
@@ -73,7 +82,7 @@ export class FuelLogService {
     fuelLogId: string,
     input: UpdateFuelLogInput,
   ): Promise<FuelLog> {
-    const { vehicle, log: existing } = await this.findOwned(userId, vehicleId, fuelLogId);
+    const { vehicle, log: existing } = await this.findWritable(userId, vehicleId, fuelLogId);
     const fueledAt = input.fueledAt === undefined ? undefined : new Date(input.fueledAt);
     if (fueledAt) this.ensureNotInFuture(fueledAt);
 
@@ -89,12 +98,12 @@ export class FuelLogService {
       notes: input.notes,
     });
     await this.raiseMileage(userId, vehicle, log);
-    return this.withEconomy(log);
+    return this.withEconomy(log, vehicle);
   }
 
   /** Never changes the vehicle's mileage. */
   async remove(userId: string, vehicleId: string, fuelLogId: string): Promise<void> {
-    const { log } = await this.findOwned(userId, vehicleId, fuelLogId);
+    const { log } = await this.findWritable(userId, vehicleId, fuelLogId);
     await this.deps.logs.delete(log.id);
   }
 
@@ -127,7 +136,19 @@ export class FuelLogService {
     return { vehicle, log };
   }
 
-  private async withEconomy(log: FuelLogRecord): Promise<FuelLog> {
-    return toFuelLog(log, computeEconomy(await this.deps.logs.listByVehicle(log.vehicleId)));
+  /** `findOwned`, then 403 for a log of a previous owner. */
+  private async findWritable(
+    userId: string,
+    vehicleId: string,
+    fuelLogId: string,
+  ): Promise<{ vehicle: Vehicle; log: FuelLogRecord }> {
+    const owned = await this.findOwned(userId, vehicleId, fuelLogId);
+    ensureUnlocked(owned.vehicle.ownedSince, owned.log.createdAt);
+    return owned;
+  }
+
+  private async withEconomy(log: FuelLogRecord, vehicle: Vehicle): Promise<FuelLog> {
+    const economy = computeEconomy(await this.deps.logs.listByVehicle(log.vehicleId));
+    return toFuelLog(log, economy, vehicle.ownedSince);
   }
 }

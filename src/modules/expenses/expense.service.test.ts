@@ -112,6 +112,7 @@ describe('ExpenseService', () => {
         issuer: null,
         attachment: null,
         attachmentUrl: null,
+        locked: false,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date),
       });

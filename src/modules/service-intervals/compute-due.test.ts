@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { computeDue, type DueInterval, type DueVisit } from './compute-due.ts';
-import { SERVICE_INTERVALS } from './service-interval.data.ts';
+import { SEED_INTERVALS } from '../../scripts/catalog-seed.data.ts';
 
 const ASOF = new Date('2026-10-17T10:00:00Z');
 const FALLBACK = { km: 10000, date: new Date('2026-01-01T00:00:00Z') };
 
-const engineOil: DueInterval = { ...SERVICE_INTERVALS[0]!, km: 5000, months: 6 };
-const frontBrakes: DueInterval = { ...SERVICE_INTERVALS[3]!, km: 25000, months: 18 };
+/** The factory intervals with their default km / months. */
+const FACTORY: DueInterval[] = SEED_INTERVALS.map(({ intervalId, km, months, ...rest }) => ({
+  ...rest,
+  id: intervalId,
+  defaultKm: km,
+  defaultMonths: months,
+  km,
+  months,
+}));
+const engineOil: DueInterval = { ...FACTORY[0]!, km: 5000, months: 6 };
+const frontBrakes: DueInterval = { ...FACTORY[3]!, km: 25000, months: 18 };
 
 const item = (
   itemId: string,
@@ -216,11 +225,7 @@ describe('computeDue', () => {
   });
 
   it('sorts worst status first, then by remainingKm ascending, keeping catalog order on ties', () => {
-    const intervals = SERVICE_INTERVALS.map((d) => ({
-      ...d,
-      km: d.defaultKm,
-      months: d.defaultMonths,
-    }));
+    const intervals = FACTORY;
     const visits = [
       visit('oil', '2026-10-01T00:00:00Z', 34000, [item('engine_oil')]), // due 39000 → ok
       visit('brakes', '2025-01-01T00:00:00Z', 10000, [item('front_brake_pads')]), // due 35000 → overdue by 350

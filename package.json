@@ -14,7 +14,10 @@
     "db:up": "docker compose up -d",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "catalog:seed": "tsx src/scripts/catalog-seed.ts",
+    "admin:grant": "tsx src/scripts/admin-role.ts grant",
+    "admin:revoke": "tsx src/scripts/admin-role.ts revoke"
   },
   "author": "",
   "license": "ISC",

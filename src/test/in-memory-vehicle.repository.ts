@@ -3,6 +3,7 @@ import type { VehicleRepository } from '../modules/vehicles/vehicle.repository.t
 import type {
   NewVehicle,
   VehicleChanges,
+  VehicleOwner,
   VehicleRecord,
 } from '../modules/vehicles/vehicle.types.ts';
 
@@ -18,6 +19,18 @@ export class InMemoryVehicleRepository implements VehicleRepository {
   async findForUser(id: string, userId: string): Promise<VehicleRecord | null> {
     const vehicle = this.vehicles.get(id);
     return vehicle?.userId === userId ? vehicle : null;
+  }
+
+  async findById(id: string): Promise<VehicleRecord | null> {
+    return this.vehicles.get(id) ?? null;
+  }
+
+  async changeOwner(id: string, owner: VehicleOwner): Promise<VehicleRecord> {
+    const existing = this.vehicles.get(id);
+    if (!existing) throw new Error(`Vehicle ${id} not found`);
+    const updated: VehicleRecord = { ...existing, ...owner, updatedAt: new Date(this.clock++) };
+    this.vehicles.set(id, updated);
+    return updated;
   }
 
   async create(input: NewVehicle): Promise<VehicleRecord> {

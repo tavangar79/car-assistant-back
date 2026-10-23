@@ -2,7 +2,9 @@ import { NotFoundError, ValidationError } from '../../shared/errors.ts';
 import { detectFileType, type FileContentType } from '../../shared/file-type.ts';
 import type { NotificationRepository } from '../notifications/notification.repository.ts';
 import { FUTURE_TOLERANCE_MS } from '../vehicles/odometer.service.ts';
+import { ensureUnlocked, isLocked } from '../vehicles/record-lock.ts';
 import type { VehicleService } from '../vehicles/vehicle.service.ts';
+import type { Vehicle } from '../vehicles/vehicle.types.ts';
 import type { ExpenseAttachmentRepository } from './expense-attachment.repository.ts';
 import type { ExpenseRepository } from './expense.repository.ts';
 import type {
@@ -40,10 +42,11 @@ export interface AttachmentUpload {
   data: Uint8Array;
 }
 
-/** The API shape of an expense: the record plus its attachment facts and URL. */
+/** The API shape of an expense: the record plus its attachment facts and URL, and whether it is locked. */
 export function toExpense(
   expense: ExpenseRecord,
   attachment: ExpenseAttachmentMeta | null,
+  ownedSince: Date | null,
 ): Expense {
   return {
     ...expense,
@@ -51,6 +54,7 @@ export function toExpense(
     attachmentUrl: attachment
       ? `/api/vehicles/${expense.vehicleId}/expenses/${expense.id}/attachment?v=${attachment.updatedAt.getTime()}`
       : null,
+    locked: isLocked(ownedSince, expense.createdAt),
   };
 }
 
@@ -63,12 +67,14 @@ export class ExpenseService {
     const vehicle = await this.deps.vehicles.getById(userId, vehicleId);
     const expenses = await this.deps.expenses.listByVehicle(vehicle.id, EXPENSE_LIST_LIMIT);
     const metas = await this.deps.attachments.findMetas(expenses.map((expense) => expense.id));
-    return expenses.map((expense) => toExpense(expense, metas.get(expense.id) ?? null));
+    return expenses.map((expense) =>
+      toExpense(expense, metas.get(expense.id) ?? null, vehicle.ownedSince),
+    );
   }
 
   async getById(userId: string, vehicleId: string, expenseId: string): Promise<Expense> {
-    const expense = await this.findOwned(userId, vehicleId, expenseId);
-    return this.withAttachment(expense);
+    const { vehicle, expense } = await this.findOwned(userId, vehicleId, expenseId);
+    return this.withAttachment(expense, vehicle);
   }
 
   async create(userId: string, vehicleId: string, input: CreateExpenseInput): Promise<Expense> {
@@ -89,7 +95,7 @@ export class ExpenseService {
       paymentMethod: input.paymentMethod ?? null,
       issuer: input.issuer ?? null,
     });
-    return toExpense(expense, null);
+    return toExpense(expense, null, vehicle.ownedSince);
   }
 
   /** `expiresAt: null` clears the expiry. The `expiresAt > paidAt` rule is checked on the merged record. */
@@ -99,7 +105,7 @@ export class ExpenseService {
     expenseId: string,
     input: UpdateExpenseInput,
   ): Promise<Expense> {
-    const existing = await this.findOwned(userId, vehicleId, expenseId);
+    const { vehicle, expense: existing } = await this.findWritable(userId, vehicleId, expenseId);
     const changedPaidAt = input.paidAt === undefined ? undefined : new Date(input.paidAt);
     const changedExpiresAt =
       input.expiresAt === undefined
@@ -124,12 +130,12 @@ export class ExpenseService {
       paymentMethod: input.paymentMethod,
       issuer: input.issuer,
     });
-    return this.withAttachment(expense);
+    return this.withAttachment(expense, vehicle);
   }
 
   /** Deletes the attachment and notifications too. */
   async remove(userId: string, vehicleId: string, expenseId: string): Promise<void> {
-    const expense = await this.findOwned(userId, vehicleId, expenseId);
+    const { expense } = await this.findWritable(userId, vehicleId, expenseId);
     await this.deps.attachments.deleteByExpenseIds([expense.id]);
     await this.deps.notifications.deleteByRefIds([expense.id]);
     await this.deps.expenses.delete(expense.id);
@@ -142,11 +148,11 @@ export class ExpenseService {
     expenseId: string,
     { fileName, data }: AttachmentUpload,
   ): Promise<Expense> {
-    const expense = await this.findOwned(userId, vehicleId, expenseId);
+    const { vehicle, expense } = await this.findWritable(userId, vehicleId, expenseId);
     const contentType = detectFileType(data, EXPENSE_ATTACHMENT_CONTENT_TYPES);
     if (!contentType) throw new ValidationError({ attachment: [EXPENSE_ATTACHMENT_BAD_TYPE] });
     const meta = await this.deps.attachments.save(expense.id, { fileName, contentType, data });
-    return toExpense(expense, meta);
+    return toExpense(expense, meta, vehicle.ownedSince);
   }
 
   async getAttachment(
@@ -154,7 +160,7 @@ export class ExpenseService {
     vehicleId: string,
     expenseId: string,
   ): Promise<ExpenseAttachment> {
-    const expense = await this.findOwned(userId, vehicleId, expenseId);
+    const { expense } = await this.findOwned(userId, vehicleId, expenseId);
     const attachment = await this.deps.attachments.findByExpenseId(expense.id);
     if (!attachment) throw new NotFoundError('Attachment');
     return attachment;
@@ -162,9 +168,9 @@ export class ExpenseService {
 
   /** Idempotent: deleting a missing attachment still succeeds. */
   async deleteAttachment(userId: string, vehicleId: string, expenseId: string): Promise<Expense> {
-    const expense = await this.findOwned(userId, vehicleId, expenseId);
+    const { vehicle, expense } = await this.findWritable(userId, vehicleId, expenseId);
     await this.deps.attachments.deleteByExpenseIds([expense.id]);
-    return toExpense(expense, null);
+    return toExpense(expense, null, vehicle.ownedSince);
   }
 
   /** Rules zod can't express: the date bound depends on today, and the expiry on the merged record. */
@@ -196,17 +202,28 @@ export class ExpenseService {
     userId: string,
     vehicleId: string,
     expenseId: string,
-  ): Promise<ExpenseRecord> {
+  ): Promise<{ vehicle: Vehicle; expense: ExpenseRecord }> {
     const vehicle = await this.deps.vehicles.getById(userId, vehicleId);
     const expense = OBJECT_ID_PATTERN.test(expenseId)
       ? await this.deps.expenses.findForVehicle(expenseId, vehicle.id)
       : null;
     if (!expense) throw new NotFoundError('Expense');
-    return expense;
+    return { vehicle, expense };
   }
 
-  private async withAttachment(expense: ExpenseRecord): Promise<Expense> {
+  /** `findOwned`, then 403 for an expense of a previous owner. */
+  private async findWritable(
+    userId: string,
+    vehicleId: string,
+    expenseId: string,
+  ): Promise<{ vehicle: Vehicle; expense: ExpenseRecord }> {
+    const owned = await this.findOwned(userId, vehicleId, expenseId);
+    ensureUnlocked(owned.vehicle.ownedSince, owned.expense.createdAt);
+    return owned;
+  }
+
+  private async withAttachment(expense: ExpenseRecord, vehicle: Vehicle): Promise<Expense> {
     const metas = await this.deps.attachments.findMetas([expense.id]);
-    return toExpense(expense, metas.get(expense.id) ?? null);
+    return toExpense(expense, metas.get(expense.id) ?? null, vehicle.ownedSince);
   }
 }

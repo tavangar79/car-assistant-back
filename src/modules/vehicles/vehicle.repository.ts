@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
-import type { NewVehicle, VehicleChanges, VehicleRecord } from './vehicle.types.ts';
+import type { NewVehicle, VehicleChanges, VehicleOwner, VehicleRecord } from './vehicle.types.ts';
 
 // The service depends on this interface, so tests can swap in an in-memory version.
 export interface VehicleRepository {
@@ -7,10 +7,14 @@ export interface VehicleRepository {
   listByUser(userId: string): Promise<VehicleRecord[]>;
   /** The vehicle only if it belongs to the user. */
   findForUser(id: string, userId: string): Promise<VehicleRecord | null>;
+  /** Any user's vehicle; only for ownership transfers. */
+  findById(id: string): Promise<VehicleRecord | null>;
   create(vehicle: NewVehicle): Promise<VehicleRecord>;
   update(id: string, changes: VehicleChanges): Promise<VehicleRecord>;
   /** Atomically makes this the user's only default vehicle. */
   makeDefault(userId: string, id: string): Promise<VehicleRecord>;
+  /** Moves the vehicle to another user (an accepted transfer). */
+  changeOwner(id: string, owner: VehicleOwner): Promise<VehicleRecord>;
   /** Atomically deletes the vehicle; if it was the default, the newest remaining one takes over. */
   deleteAndPromote(userId: string, id: string): Promise<void>;
 }
@@ -24,6 +28,14 @@ export class PrismaVehicleRepository implements VehicleRepository {
 
   findForUser(id: string, userId: string): Promise<VehicleRecord | null> {
     return this.prisma.vehicle.findFirst({ where: { id, userId } });
+  }
+
+  findById(id: string): Promise<VehicleRecord | null> {
+    return this.prisma.vehicle.findUnique({ where: { id } });
+  }
+
+  changeOwner(id: string, owner: VehicleOwner): Promise<VehicleRecord> {
+    return this.prisma.vehicle.update({ where: { id }, data: owner });
   }
 
   create(vehicle: NewVehicle): Promise<VehicleRecord> {

@@ -69,6 +69,35 @@ export class VehicleCatalog {
     return errors;
   }
 
+  /**
+   * For a partial choice (a service-catalog scope, where null means "any"): `modelId` needs `makeId`,
+   * `trimId` needs `modelId`, and each given id must exist under its parent. Empty when valid.
+   */
+  checkScope({
+    makeId,
+    modelId,
+    trimId,
+  }: {
+    makeId: string | null;
+    modelId: string | null;
+    trimId: string | null;
+  }): string[] {
+    if (modelId !== null && makeId === null) return ['modelId requires makeId'];
+    if (trimId !== null && modelId === null) return ['trimId requires modelId'];
+    if (makeId !== null && !this.makes.has(makeId)) return ['Unknown make'];
+    if (modelId !== null) {
+      const model = this.models.get(modelId);
+      if (!model) return ['Unknown model'];
+      if (model.makeId !== makeId) return ['Model does not belong to the make'];
+    }
+    if (trimId !== null) {
+      const trim = this.trims.get(trimId);
+      if (!trim) return ['Unknown trim'];
+      if (trim.modelId !== modelId) return ['Trim does not belong to the model'];
+    }
+    return [];
+  }
+
   /** Display names for stored ids. An id no longer in the catalog falls back to the id itself. */
   resolve({ makeId, modelId, trimId }: CatalogSelection): ResolvedSelection {
     const name = (found: CatalogRef | undefined, id: string) =>

@@ -9,6 +9,7 @@ import type { OtpSettings } from './modules/auth/auth.types.ts';
 import type { AvatarRepository } from './modules/auth/avatar.repository.ts';
 import type { CodeGenerator, OtpHasher } from './modules/auth/otp-code.ts';
 import type { OtpRepository } from './modules/auth/otp.repository.ts';
+import { requireAdmin } from './modules/auth/require-admin.ts';
 import { requireAuth } from './modules/auth/require-auth.ts';
 import type { SmsSender } from './modules/auth/sms-sender.ts';
 import type { TokenService } from './modules/auth/token.service.ts';
@@ -32,12 +33,16 @@ import type { NotificationRepository } from './modules/notifications/notificatio
 import { notificationRoutes } from './modules/notifications/notification.routes.ts';
 import { NotificationService } from './modules/notifications/notification.service.ts';
 import { profileRoutes } from './modules/profile/profile.routes.ts';
+import { reportRoutes } from './modules/reports/report.routes.ts';
+import { ReportService } from './modules/reports/report.service.ts';
 import { ProfileService } from './modules/profile/profile.service.ts';
-import { SERVICE_INTERVALS } from './modules/service-intervals/service-interval.data.ts';
+import { catalogAdminRoutes } from './modules/service-catalog/catalog-admin.routes.ts';
+import { CatalogAdminService } from './modules/service-catalog/catalog-admin.service.ts';
+import type { IntervalDefRepository } from './modules/service-catalog/interval-def.repository.ts';
+import type { ServiceItemDefRepository } from './modules/service-catalog/service-item-def.repository.ts';
 import type { ServiceIntervalRepository } from './modules/service-intervals/service-interval.repository.ts';
 import { serviceIntervalRoutes } from './modules/service-intervals/service-interval.routes.ts';
 import { ServiceIntervalService } from './modules/service-intervals/service-interval.service.ts';
-import { SERVICE_ITEMS } from './modules/service-items/service-items.data.ts';
 import { serviceItemRoutes } from './modules/service-items/service-items.routes.ts';
 import { ServiceItemCatalog } from './modules/service-items/service-items.ts';
 import type { ServiceInvoiceRepository } from './modules/service-visits/service-invoice.repository.ts';
@@ -45,6 +50,9 @@ import { serviceSuggestionRoutes } from './modules/service-visits/service-sugges
 import type { ServiceVisitRepository } from './modules/service-visits/service-visit.repository.ts';
 import { serviceVisitRoutes } from './modules/service-visits/service-visit.routes.ts';
 import { ServiceVisitService } from './modules/service-visits/service-visit.service.ts';
+import type { TransferRepository } from './modules/transfers/transfer.repository.ts';
+import { transferRoutes, vehicleTransferRoutes } from './modules/transfers/transfer.routes.ts';
+import { TransferService } from './modules/transfers/transfer.service.ts';
 import { VEHICLE_CATALOG } from './modules/vehicle-catalog/vehicle-catalog.data.ts';
 import { vehicleCatalogRoutes } from './modules/vehicle-catalog/vehicle-catalog.routes.ts';
 import { VehicleCatalog } from './modules/vehicle-catalog/vehicle-catalog.ts';
@@ -68,6 +76,10 @@ export interface AppDependencies {
   /** Largest accepted invoice photo upload, in bytes. */
   serviceInvoiceMaxBytes: number;
   serviceIntervalRepository: ServiceIntervalRepository;
+  /** Service item definitions in every scope (global, make, model, trim). */
+  serviceItemDefRepository: ServiceItemDefRepository;
+  /** Service interval definitions in every scope. */
+  intervalDefRepository: IntervalDefRepository;
   fuelLogRepository: FuelLogRepository;
   expenseRepository: ExpenseRepository;
   expenseAttachmentRepository: ExpenseAttachmentRepository;
@@ -80,6 +92,9 @@ export interface AppDependencies {
   /** AES-256-GCM key (32 bytes) for document files at rest. */
   documentEncryptionKey: Uint8Array;
   notificationRepository: NotificationRepository;
+  transferRepository: TransferRepository;
+  /** More matching entries than this in `GET /api/reports` → 422. */
+  reportMaxEntries: number;
   userRepository: UserRepository;
   avatarRepository: AvatarRepository;
   /** Largest accepted avatar upload, in bytes. */
@@ -129,7 +144,6 @@ export function createApp(deps: AppDependencies): Express {
   );
   // Static data, no I/O, so it is built here rather than injected.
   const vehicleCatalog = new VehicleCatalog(VEHICLE_CATALOG);
-  const serviceItems = new ServiceItemCatalog(SERVICE_ITEMS);
   const vehicleService = new VehicleService({
     vehicles: deps.vehicleRepository,
     photos: deps.vehiclePhotoRepository,
@@ -146,8 +160,23 @@ export function createApp(deps: AppDependencies): Express {
     catalog: vehicleCatalog,
     now: deps.now,
   });
+  const serviceItems = new ServiceItemCatalog({
+    definitions: deps.serviceItemDefRepository,
+    vehicles: vehicleService,
+  });
+  const catalogAdminService = new CatalogAdminService({
+    items: deps.serviceItemDefRepository,
+    intervals: deps.intervalDefRepository,
+    vehicleCatalog,
+  });
   app.use('/api/vehicle-catalog', authenticate, vehicleCatalogRoutes(vehicleCatalog));
   app.use('/api/service-items', authenticate, serviceItemRoutes(serviceItems));
+  app.use(
+    '/api/admin',
+    authenticate,
+    requireAdmin(deps.userRepository),
+    catalogAdminRoutes(catalogAdminService),
+  );
   const odometerService = new OdometerService({
     readings: deps.odometerReadingRepository,
     vehicles: vehicleService,
@@ -162,7 +191,7 @@ export function createApp(deps: AppDependencies): Express {
     now: deps.now,
   });
   const serviceIntervalService = new ServiceIntervalService({
-    definitions: SERVICE_INTERVALS,
+    definitions: deps.intervalDefRepository,
     overrides: deps.serviceIntervalRepository,
     vehicles: vehicleService,
     visits: deps.serviceVisitRepository,
@@ -212,6 +241,20 @@ export function createApp(deps: AppDependencies): Express {
     intervals: serviceIntervalService,
     now: deps.now,
   });
+  const reportService = new ReportService({
+    history: historyService,
+    maxEntries: deps.reportMaxEntries,
+  });
+  const transferService = new TransferService({
+    transfers: deps.transferRepository,
+    vehicleRecords: deps.vehicleRepository,
+    vehicles: vehicleService,
+    users: deps.userRepository,
+    documents: deps.documentRepository,
+    documentFiles: deps.documentFileRepository,
+    notifications: deps.notificationRepository,
+    now: deps.now,
+  });
   const profileService = new ProfileService({
     vehicles: vehicleService,
     visits: deps.serviceVisitRepository,
@@ -219,9 +262,11 @@ export function createApp(deps: AppDependencies): Express {
   });
   app.use('/api/service-suggestions', authenticate, serviceSuggestionRoutes(serviceVisitService));
   app.use('/api/history', authenticate, historyRoutes(historyService));
+  app.use('/api/reports', authenticate, reportRoutes(reportService));
   app.use('/api/dashboard', authenticate, dashboardRoutes(dashboardService));
   app.use('/api/profile', authenticate, profileRoutes(profileService));
   app.use('/api/notifications', authenticate, notificationRoutes(notificationService));
+  app.use('/api/transfers', authenticate, transferRoutes(transferService));
   app.use(
     '/api/vehicles',
     authenticate,
@@ -232,6 +277,7 @@ export function createApp(deps: AppDependencies): Express {
     fuelLogRoutes(fuelLogService),
     expenseRoutes(expenseService, deps.expenseAttachmentMaxBytes),
     documentRoutes(documentService, deps.documentFileMaxBytes),
+    vehicleTransferRoutes(transferService),
   );
 
   app.use(notFoundHandler);

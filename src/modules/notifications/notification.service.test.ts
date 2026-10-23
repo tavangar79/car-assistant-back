@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { NotFoundError } from '../../shared/errors.ts';
 import { createGarage, type Garage } from '../../test/garage-fixture.ts';
-import { SERVICE_INTERVALS } from '../service-intervals/service-interval.data.ts';
 import { ServiceIntervalService } from '../service-intervals/service-interval.service.ts';
 import type { NewNotification } from './notification.types.ts';
 import { NotificationService } from './notification.service.ts';
@@ -30,7 +29,7 @@ describe('NotificationService', () => {
       notifications: r.notificationRepository,
       vehicles: garage.vehicleService,
       intervals: new ServiceIntervalService({
-        definitions: SERVICE_INTERVALS,
+        definitions: r.intervalDefRepository,
         overrides: r.serviceIntervalRepository,
         vehicles: garage.vehicleService,
         visits: r.serviceVisitRepository,

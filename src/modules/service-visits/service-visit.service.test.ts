@@ -13,7 +13,9 @@ import { InMemoryServiceInvoiceRepository } from '../../test/in-memory-service-i
 import { InMemoryServiceVisitRepository } from '../../test/in-memory-service-visit.repository.ts';
 import { InMemoryVehiclePhotoRepository } from '../../test/in-memory-vehicle-photo.repository.ts';
 import { InMemoryVehicleRepository } from '../../test/in-memory-vehicle.repository.ts';
-import { SERVICE_ITEMS } from '../service-items/service-items.data.ts';
+import type { InMemoryServiceItemDefRepository } from '../../test/in-memory-service-item-def.repository.ts';
+import { seededServiceItemDefs } from '../../test/test-dependencies.ts';
+import { globalServiceItemRows } from '../service-catalog/catalog-seed.ts';
 import { ServiceItemCatalog } from '../service-items/service-items.ts';
 import { VEHICLE_CATALOG } from '../vehicle-catalog/vehicle-catalog.data.ts';
 import { VehicleCatalog } from '../vehicle-catalog/vehicle-catalog.ts';
@@ -56,6 +58,9 @@ function visitInput(overrides: Partial<CreateServiceVisitInput> = {}): CreateSer
   };
 }
 
+const globalItem = (itemId: string) =>
+  globalServiceItemRows().find((row) => row.itemId === itemId)!;
+
 async function validationDetails(promise: Promise<unknown>): Promise<unknown> {
   const err = await promise.catch((e: unknown) => e);
   expect(err).toBeInstanceOf(ValidationError);
@@ -67,6 +72,7 @@ describe('ServiceVisitService', () => {
   let visits: InMemoryServiceVisitRepository;
   let invoices: InMemoryServiceInvoiceRepository;
   let vehicleService: VehicleService;
+  let itemDefs: InMemoryServiceItemDefRepository;
   let service: ServiceVisitService;
   let vehicleId: string;
 
@@ -75,6 +81,7 @@ describe('ServiceVisitService', () => {
     readings = new InMemoryOdometerReadingRepository(vehicles);
     visits = new InMemoryServiceVisitRepository();
     invoices = new InMemoryServiceInvoiceRepository();
+    itemDefs = seededServiceItemDefs();
     vehicleService = new VehicleService({
       vehicles,
       photos: new InMemoryVehiclePhotoRepository(),
@@ -96,11 +103,20 @@ describe('ServiceVisitService', () => {
       invoices,
       vehicles: vehicleService,
       odometer: new OdometerService({ readings, vehicles: vehicleService, now: () => NOW }),
-      items: new ServiceItemCatalog(SERVICE_ITEMS),
+      items: new ServiceItemCatalog({ definitions: itemDefs, vehicles: vehicleService }),
       now: () => NOW,
     });
     vehicleId = (await vehicleService.create(ALICE, vehicleInput('345', 34500))).id;
   });
+
+  /** A disabled model-scoped override for the test vehicle (Iran Khodro Tara). */
+  const disableForTara = (itemId: string) =>
+    itemDefs.create({
+      ...globalItem(itemId),
+      makeId: 'iran-khodro',
+      modelId: 'tara',
+      disabled: true,
+    });
 
   const mileage = async () => (await vehicleService.getById(ALICE, vehicleId)).mileageKm;
 
@@ -136,6 +152,7 @@ describe('ServiceVisitService', () => {
         totalCost: 2130000,
         invoice: null,
         invoiceUrl: null,
+        locked: false,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date),
       });
@@ -194,6 +211,23 @@ describe('ServiceVisitService', () => {
       ).toEqual({
         lineItems: ['Unknown item: nope', 'Unknown item: also_nope'],
       });
+    });
+
+    it('rejects an item disabled for the vehicle, and accepts one scoped to it', async () => {
+      await disableForTara('oil_filter');
+      await itemDefs.create({
+        ...globalItem('engine_oil'),
+        itemId: 'cvt_oil',
+        makeId: 'iran-khodro',
+      });
+
+      expect(await validationDetails(service.create(ALICE, vehicleId, visitInput()))).toEqual({
+        lineItems: ['Item is disabled for this vehicle: oil_filter'],
+      });
+      const lineItems = [{ itemId: 'cvt_oil', cost: 1 }];
+      await expect(
+        service.create(ALICE, vehicleId, visitInput({ lineItems })),
+      ).resolves.toMatchObject({ lineItems: [{ itemId: 'cvt_oil' }] });
     });
 
     it("returns 404 for another user's vehicle", async () => {
@@ -336,6 +370,29 @@ describe('ServiceVisitService', () => {
           }),
         ),
       ).toEqual({ serviceDate: ['Must not be in the future'], lineItems: ['Unknown item: nope'] });
+    });
+
+    it('keeps existing line items whose item was disabled later, but rejects adding one', async () => {
+      const created = await service.create(ALICE, vehicleId, visitInput());
+      await disableForTara('oil_filter');
+      await disableForTara('coolant');
+
+      const updated = await service.update(ALICE, vehicleId, created.id, {
+        workshop: 'دیگر',
+        lineItems: [
+          { itemId: 'engine_oil', cost: 10 },
+          { itemId: 'oil_filter', cost: 20 },
+        ],
+      });
+      expect(updated.lineItems.map((item) => item.itemId)).toEqual(['engine_oil', 'oil_filter']);
+
+      expect(
+        await validationDetails(
+          service.update(ALICE, vehicleId, created.id, {
+            lineItems: [{ itemId: 'coolant', cost: 1 }],
+          }),
+        ),
+      ).toEqual({ lineItems: ['Item is disabled for this vehicle: coolant'] });
     });
 
     it("returns 404 for another user's vehicle", async () => {

@@ -7,6 +7,7 @@ import { VEHICLE_CATALOG } from '../modules/vehicle-catalog/vehicle-catalog.data
 import { VehicleCatalog } from '../modules/vehicle-catalog/vehicle-catalog.ts';
 import { VehicleService } from '../modules/vehicles/vehicle.service.ts';
 import { JPEG_BYTES, PDF_BYTES } from './image-fixtures.ts';
+import { seededIntervalDefs, seededServiceItemDefs } from './test-dependencies.ts';
 import { InMemoryDocumentFileRepository } from './in-memory-document-file.repository.ts';
 import { InMemoryDocumentRepository } from './in-memory-document.repository.ts';
 import { InMemoryExpenseAttachmentRepository } from './in-memory-expense-attachment.repository.ts';
@@ -42,6 +43,8 @@ export function createGarage(now: Date) {
     serviceVisitRepository: new InMemoryServiceVisitRepository(),
     serviceInvoiceRepository: new InMemoryServiceInvoiceRepository(),
     serviceIntervalRepository: new InMemoryServiceIntervalRepository(),
+    serviceItemDefRepository: seededServiceItemDefs(),
+    intervalDefRepository: seededIntervalDefs(),
     fuelLogRepository: new InMemoryFuelLogRepository(),
     expenseRepository: new InMemoryExpenseRepository(),
     expenseAttachmentRepository: new InMemoryExpenseAttachmentRepository(),

@@ -1,9 +1,21 @@
+import { SERVICE_CATEGORIES, type ServiceItemDef } from '../service-catalog/catalog.types.ts';
+import {
+  resolveForVehicle,
+  resolveLeastSpecific,
+  vehicleScope,
+} from '../service-catalog/resolve-for-vehicle.ts';
+import type { ServiceItemDefRepository } from '../service-catalog/service-item-def.repository.ts';
+import type { VehicleService } from '../vehicles/vehicle.service.ts';
+import type { Vehicle } from '../vehicles/vehicle.types.ts';
+
 export interface ServiceItem {
   id: string;
   title: string;
   subtitle: string;
   /** Material Symbols icon name. */
   icon: string;
+  /** Disabled for this vehicle (or, in the title lookup, on its least specific row). */
+  disabled: boolean;
 }
 
 export interface ServiceCategory {
@@ -12,34 +24,66 @@ export interface ServiceCategory {
   items: ServiceItem[];
 }
 
-/** Lookups over the static service-items catalog. Item ids are unique across categories. */
+/** A resolved item with its category, keyed by `itemId` in the maps below. */
+export interface CatalogItem extends ServiceItem {
+  categoryId: string;
+}
+
+export interface ServiceItemCatalogDeps {
+  definitions: ServiceItemDefRepository;
+  /** Ownership checks for `list(userId, vehicleId)`. */
+  vehicles: VehicleService;
+}
+
+const itemKey = (row: ServiceItemDef) => row.itemId;
+
+const toItems = (rows: ServiceItemDef[]): Map<string, CatalogItem> =>
+  new Map(
+    rows.map((row) => [
+      row.itemId,
+      {
+        id: row.itemId,
+        title: row.title,
+        subtitle: row.subtitle,
+        icon: row.icon,
+        disabled: row.disabled,
+        categoryId: row.categoryId,
+      },
+    ]),
+  );
+
+/** Groups items (already in display order) by the static categories; empty categories are omitted. */
+export function toCategories(items: Iterable<CatalogItem>): { categories: ServiceCategory[] } {
+  const all = [...items];
+  const categories = SERVICE_CATEGORIES.map((category) => ({
+    id: category.id,
+    title: category.title,
+    items: all
+      .filter((item) => item.categoryId === category.id)
+      .map(({ id, title, subtitle, icon, disabled }) => ({ id, title, subtitle, icon, disabled })),
+  }));
+  return { categories: categories.filter((category) => category.items.length > 0) };
+}
+
+/** The service-item catalog stored in MongoDB, resolved per vehicle. Rows are loaded on every call (no cache). */
 export class ServiceItemCatalog {
-  private readonly items = new Map<string, ServiceItem>();
-  private readonly categoryIds = new Map<string, string>();
+  constructor(private readonly deps: ServiceItemCatalogDeps) {}
 
-  constructor(private readonly categories: ServiceCategory[]) {
-    for (const category of categories) {
-      for (const item of category.items) {
-        this.items.set(item.id, item);
-        this.categoryIds.set(item.id, category.id);
-      }
-    }
+  /** With a vehicle: its resolved catalog incl. disabled items (404 if not the caller's). Without: the title lookup. */
+  async list(userId: string, vehicleId?: string): Promise<{ categories: ServiceCategory[] }> {
+    if (vehicleId === undefined) return toCategories((await this.lookup()).values());
+    const vehicle = await this.deps.vehicles.getById(userId, vehicleId);
+    return toCategories((await this.forVehicle(vehicle)).values());
   }
 
-  list(): { categories: ServiceCategory[] } {
-    return { categories: this.categories };
+  /** The vehicle's resolved items, including disabled ones, in display order. */
+  async forVehicle(vehicle: Vehicle): Promise<Map<string, CatalogItem>> {
+    const rows = await this.deps.definitions.listAll();
+    return toItems(resolveForVehicle(rows, vehicleScope(vehicle), itemKey));
   }
 
-  has(itemId: string): boolean {
-    return this.items.has(itemId);
-  }
-
-  get(itemId: string): ServiceItem | undefined {
-    return this.items.get(itemId);
-  }
-
-  /** The id of the category the item belongs to, e.g. `fluids`. */
-  categoryOf(itemId: string): string | undefined {
-    return this.categoryIds.get(itemId);
+  /** Every known item from its least specific row (global when it exists), in display order. */
+  async lookup(): Promise<Map<string, CatalogItem>> {
+    return toItems(resolveLeastSpecific(await this.deps.definitions.listAll(), itemKey));
   }
 }

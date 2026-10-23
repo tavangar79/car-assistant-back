@@ -16,12 +16,17 @@ import { VEHICLE_CATALOG } from '../vehicle-catalog/vehicle-catalog.data.ts';
 import { VehicleCatalog } from '../vehicle-catalog/vehicle-catalog.ts';
 import { VehicleService } from '../vehicles/vehicle.service.ts';
 import type { CreateVehicleInput } from '../vehicles/vehicle.types.ts';
-import { SERVICE_INTERVALS } from './service-interval.data.ts';
+import { SEED_INTERVALS } from '../../scripts/catalog-seed.data.ts';
+import type { InMemoryIntervalDefRepository } from '../../test/in-memory-interval-def.repository.ts';
+import { seededIntervalDefs } from '../../test/test-dependencies.ts';
+import { globalIntervalRows } from '../service-catalog/catalog-seed.ts';
 import { ServiceIntervalService } from './service-interval.service.ts';
 
 const ALICE = 'aaaaaaaaaaaaaaaaaaaaaaaa';
 const BOB = 'bbbbbbbbbbbbbbbbbbbbbbbb';
 const NOW = new Date('2026-10-17T10:00:00Z');
+
+const engineOilRow = () => globalIntervalRows()[0]!;
 
 const vehicleInput = (threeDigits: string, mileageKm: number): CreateVehicleInput => ({
   nickname: 'تارا',
@@ -34,6 +39,7 @@ const vehicleInput = (threeDigits: string, mileageKm: number): CreateVehicleInpu
 
 describe('ServiceIntervalService', () => {
   let overrides: InMemoryServiceIntervalRepository;
+  let definitions: InMemoryIntervalDefRepository;
   let visits: InMemoryServiceVisitRepository;
   let readings: InMemoryOdometerReadingRepository;
   let vehicleService: VehicleService;
@@ -43,6 +49,7 @@ describe('ServiceIntervalService', () => {
   beforeEach(async () => {
     const vehicles = new InMemoryVehicleRepository();
     overrides = new InMemoryServiceIntervalRepository();
+    definitions = seededIntervalDefs();
     visits = new InMemoryServiceVisitRepository();
     readings = new InMemoryOdometerReadingRepository(vehicles);
     vehicleService = new VehicleService({
@@ -62,7 +69,7 @@ describe('ServiceIntervalService', () => {
       now: () => NOW,
     });
     service = new ServiceIntervalService({
-      definitions: SERVICE_INTERVALS,
+      definitions,
       overrides,
       vehicles: vehicleService,
       visits,
@@ -92,7 +99,7 @@ describe('ServiceIntervalService', () => {
     it('returns all 8 intervals with factory defaults, in catalog order', async () => {
       const intervals = await service.list(ALICE, vehicleId);
 
-      expect(intervals.map((i) => i.id)).toEqual(SERVICE_INTERVALS.map((d) => d.id));
+      expect(intervals.map((i) => i.id)).toEqual(SEED_INTERVALS.map((d) => d.intervalId));
       expect(intervals[0]).toEqual({
         id: 'engine_oil',
         title: 'روغن موتور و فیلتر روغن',
@@ -109,6 +116,56 @@ describe('ServiceIntervalService', () => {
 
     it("returns 404 for another user's vehicle", async () => {
       await expect(service.list(BOB, vehicleId)).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it("uses the vehicle's resolved row for the defaults", async () => {
+      await definitions.create({
+        ...engineOilRow(),
+        makeId: 'iran-khodro',
+        modelId: 'tara',
+        km: 8000,
+        months: 12,
+      });
+      // Another model's row does not apply.
+      await definitions.create({
+        ...engineOilRow(),
+        makeId: 'iran-khodro',
+        modelId: 'dena-plus',
+        km: 3000,
+      });
+
+      const [engineOil] = await service.list(ALICE, vehicleId);
+
+      expect(engineOil).toMatchObject({ id: 'engine_oil', defaultKm: 8000, km: 8000, months: 12 });
+    });
+
+    it('leaves out intervals disabled for the vehicle and adds scoped ones', async () => {
+      await definitions.create({ ...engineOilRow(), makeId: 'iran-khodro', disabled: true });
+      await definitions.create({
+        ...engineOilRow(),
+        intervalId: 'cvt_oil',
+        makeId: 'iran-khodro',
+        modelId: 'tara',
+        sortOrder: 100,
+      });
+
+      const ids = (await service.list(ALICE, vehicleId)).map((i) => i.id);
+
+      expect(ids).not.toContain('engine_oil');
+      expect(ids.at(-1)).toBe('cvt_oil');
+      expect(ids).toHaveLength(8);
+    });
+
+    it('ignores a stored override of an interval no longer resolved', async () => {
+      await overrides.save({ vehicleId, intervalId: 'gone', km: 1000, months: 1 });
+      await overrides.save({ vehicleId, intervalId: 'engine_oil', km: 7000, months: 6 });
+      await definitions.create({ ...engineOilRow(), makeId: 'iran-khodro', disabled: true });
+
+      const intervals = await service.list(ALICE, vehicleId);
+
+      expect(intervals.map((i) => i.id)).not.toContain('engine_oil');
+      expect(intervals.every((i) => !i.isCustom)).toBe(true);
+      expect(overrides.overrides.size).toBe(2);
     });
   });
 
@@ -150,6 +207,18 @@ describe('ServiceIntervalService', () => {
       expect(overrides.overrides.size).toBe(0);
     });
 
+    it('rejects an interval disabled for the vehicle', async () => {
+      await definitions.create({ ...engineOilRow(), makeId: 'iran-khodro', disabled: true });
+
+      const err = await service
+        .set(ALICE, vehicleId, { intervals: [{ id: 'engine_oil', km: 7000, months: 6 }] })
+        .catch((e: unknown) => e);
+
+      expect((err as ValidationError).details).toEqual({
+        intervals: ['Unknown interval: engine_oil'],
+      });
+    });
+
     it('keeps overrides per vehicle', async () => {
       const other = await vehicleService.create(ALICE, vehicleInput('222', 0));
       await service.set(ALICE, other.id, { intervals: [{ id: 'coolant', km: 20000, months: 12 }] });
@@ -183,6 +252,15 @@ describe('ServiceIntervalService', () => {
       expect(report.asOf).toEqual(NOW);
       expect(report.mileageKm).toBe(34500);
       expect(report.items).toHaveLength(8);
+    });
+
+    it('only covers the resolved, enabled intervals', async () => {
+      await definitions.create({ ...engineOilRow(), makeId: 'iran-khodro', disabled: true });
+
+      const { items } = await service.due(ALICE, vehicleId);
+
+      expect(items).toHaveLength(7);
+      expect(items.map((i) => i.intervalId)).not.toContain('engine_oil');
     });
 
     it('uses the vehicle creation as baseline without visits or readings', async () => {

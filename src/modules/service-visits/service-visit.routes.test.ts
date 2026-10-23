@@ -107,6 +107,7 @@ describe('/api/vehicles/:id/services', () => {
           totalCost: 2130000,
           invoice: null,
           invoiceUrl: null,
+          locked: false,
           createdAt: ISO_DATE,
           updatedAt: ISO_DATE,
         },

@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import type { ServiceIntervalDefinition } from './service-interval.data.ts';
 
 export const INTERVAL_KM_MIN = 500;
 export const INTERVAL_KM_MAX = 200_000;
@@ -15,6 +14,22 @@ export const setIntervalsSchema = z.object({
     }),
   ),
 });
+
+/**
+ * A tracked interval as resolved for a vehicle: any visit with one of `coversItemIds` resets it.
+ * `defaultKm` / `defaultMonths` come from the resolved `IntervalDef` row.
+ */
+export interface ServiceIntervalDefinition {
+  id: string;
+  title: string;
+  /** One line on what the work is. */
+  description: string;
+  /** Material Symbols icon name. */
+  icon: string;
+  coversItemIds: string[];
+  defaultKm: number;
+  defaultMonths: number;
+}
 
 export type SetIntervalsInput = z.infer<typeof setIntervalsSchema>;
 

@@ -47,7 +47,7 @@ export const DEFAULT_REQUIRED = 'Set another vehicle as default instead';
 
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
-const samePlate = (a: Plate, b: Plate) =>
+export const samePlate = (a: Plate, b: Plate) =>
   a.twoDigits === b.twoDigits &&
   a.letter === b.letter &&
   a.threeDigits === b.threeDigits &&
@@ -97,6 +97,7 @@ export class VehicleService {
       mileageKm: input.mileageKm,
       color: input.color ?? null,
       isDefault: isFirst,
+      ownedSince: null,
     });
     const saved =
       !isFirst && input.isDefault === true ? await vehicles.makeDefault(userId, record.id) : record;
@@ -260,6 +261,7 @@ export class VehicleService {
       photoUrl: photoUpdatedAt
         ? `/api/vehicles/${record.id}/photo?v=${photoUpdatedAt.getTime()}`
         : null,
+      ownedSince: record.ownedSince,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     };
