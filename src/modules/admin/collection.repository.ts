@@ -22,10 +22,7 @@ export interface FindOptions {
 /** Read-only access to the registered collections, for the admin panel. */
 export interface CollectionRepository {
   count(name: CollectionName, filter?: CollectionFilter): Promise<number>;
-  /**
-   * Newest id first. Rows hold the registered fields only; a measured Bytes field comes back as
-   * `sizeBytes`, never as bytes.
-   */
+  /** Newest id first. Rows hold the registered fields only (never a file's `storageKey`). */
   find(name: CollectionName, options?: FindOptions): Promise<Row[]>;
   /** `createdAt` of every row created in [from, to). */
   listCreatedAt(name: CollectionName, from: Date, to: Date): Promise<Date[]>;
@@ -34,7 +31,6 @@ export interface CollectionRepository {
 interface Delegate {
   count(args: { where?: object }): Promise<number>;
   findMany(args: object): Promise<Row[]>;
-  aggregateRaw(args: { pipeline: object[] }): Promise<unknown>;
 }
 
 export class PrismaCollectionRepository implements CollectionRepository {
@@ -44,30 +40,14 @@ export class PrismaCollectionRepository implements CollectionRepository {
     return this.delegate(this.entry(name)).count({ where: filter });
   }
 
-  async find(
-    name: CollectionName,
-    { filter = {}, cursor, limit }: FindOptions = {},
-  ): Promise<Row[]> {
+  find(name: CollectionName, { filter = {}, cursor, limit }: FindOptions = {}): Promise<Row[]> {
     const entry = this.entry(name);
-    const delegate = this.delegate(entry);
-    const stored = entry.fields.filter((field) => !(entry.measuredBytes && field === 'sizeBytes'));
-    const rows = await delegate.findMany({
+    return this.delegate(entry).findMany({
       where: { ...filter, ...(cursor ? { id: { lt: cursor } } : {}) },
       orderBy: { id: 'desc' },
       ...(limit === undefined ? {} : { take: limit }),
-      select: Object.fromEntries(stored.map((field) => [field, true])),
+      select: Object.fromEntries(entry.fields.map((field) => [field, true])),
     });
-    if (!entry.measuredBytes || rows.length === 0) return rows;
-
-    // Measured in the database, so the bytes never leave it.
-    const sizes = (await delegate.aggregateRaw({
-      pipeline: [
-        { $match: { _id: { $in: rows.map((row) => ({ $oid: row.id })) } } },
-        { $project: { size: { $binarySize: `$${entry.measuredBytes}` } } },
-      ],
-    })) as { _id: { $oid: string }; size: number | null }[];
-    const sizeById = new Map(sizes.map((size) => [size._id.$oid, size.size ?? 0]));
-    return rows.map((row) => ({ ...row, sizeBytes: sizeById.get(row.id as string) ?? 0 }));
   }
 
   async listCreatedAt(name: CollectionName, from: Date, to: Date): Promise<Date[]> {

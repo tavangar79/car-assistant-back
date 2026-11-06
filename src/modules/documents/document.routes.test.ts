@@ -5,6 +5,7 @@ import { JPEG_BYTES, PDF_BYTES, PNG_BYTES } from '../../test/image-fixtures.ts';
 import { InMemoryDocumentFileRepository } from '../../test/in-memory-document-file.repository.ts';
 import { InMemoryNotificationRepository } from '../../test/in-memory-notification.repository.ts';
 import { createTestDependencies, TEST_JWT_SECRET } from '../../test/test-dependencies.ts';
+import { InMemoryFileStorage } from '../../test/in-memory-file-storage.ts';
 import { TokenService } from '../auth/token.service.ts';
 import { inlineDisposition } from './document.routes.ts';
 
@@ -367,8 +368,8 @@ describe('/api/vehicles/:id/documents', () => {
       expect(downloaded.headers['content-type']).toBe('image/jpeg');
       expect(downloaded.headers['content-disposition']).toBe(inlineDisposition('کارت (جلو).jpg'));
       expect(downloaded.headers['cache-control']).toBe('private, max-age=31536000');
-      const stored = Buffer.from([...files.files.values()][0]!.data);
-      expect(stored.includes(JPEG_BYTES)).toBe(false);
+      const [stored] = (deps.fileStorage as InMemoryFileStorage).contents();
+      expect(stored!.includes(JPEG_BYTES)).toBe(false);
     });
 
     it('lists the files oldest first on GET one and GET list', async () => {

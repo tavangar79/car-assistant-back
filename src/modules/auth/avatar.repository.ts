@@ -1,22 +1,27 @@
 import type { PrismaClient } from '@prisma/client';
-import type { NewUserAvatar, UserAvatar } from './auth.types.ts';
+import type { NewUserAvatar, StoredUserAvatar } from './auth.types.ts';
 
 export interface AvatarRepository {
-  findByUserId(userId: string): Promise<UserAvatar | null>;
-  /** When the user's avatar last changed, without loading its bytes; null if none. */
+  findByUserId(userId: string): Promise<StoredUserAvatar | null>;
+  /** When the user's avatar last changed; null if none. */
   findUpdatedAt(userId: string): Promise<Date | null>;
-  /** Creates or replaces the user's avatar. */
-  save(userId: string, avatar: NewUserAvatar): Promise<UserAvatar>;
-  /** No-op when the user has no avatar. */
-  delete(userId: string): Promise<void>;
+  /** Creates or replaces the user's avatar row. */
+  save(userId: string, avatar: NewUserAvatar): Promise<StoredUserAvatar>;
+  /** The storage keys of the removed rows (none when the user has no avatar). */
+  delete(userId: string): Promise<string[]>;
 }
 
-const AVATAR_FIELDS = { contentType: true, data: true, updatedAt: true } as const;
+const AVATAR_FIELDS = {
+  contentType: true,
+  storageKey: true,
+  sizeBytes: true,
+  updatedAt: true,
+} as const;
 
 export class PrismaAvatarRepository implements AvatarRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  findByUserId(userId: string): Promise<UserAvatar | null> {
+  findByUserId(userId: string): Promise<StoredUserAvatar | null> {
     return this.prisma.userAvatar.findUnique({ where: { userId }, select: AVATAR_FIELDS });
   }
 
@@ -28,9 +33,7 @@ export class PrismaAvatarRepository implements AvatarRepository {
     return avatar?.updatedAt ?? null;
   }
 
-  save(userId: string, { contentType, data }: NewUserAvatar): Promise<UserAvatar> {
-    // Prisma wants bytes backed by a plain ArrayBuffer; a Node Buffer may sit on a shared pool.
-    const avatar = { contentType, data: new Uint8Array(data) };
+  save(userId: string, avatar: NewUserAvatar): Promise<StoredUserAvatar> {
     return this.prisma.userAvatar.upsert({
       where: { userId },
       create: { userId, ...avatar },
@@ -39,7 +42,12 @@ export class PrismaAvatarRepository implements AvatarRepository {
     });
   }
 
-  async delete(userId: string): Promise<void> {
+  async delete(userId: string): Promise<string[]> {
+    const rows = await this.prisma.userAvatar.findMany({
+      where: { userId },
+      select: { storageKey: true },
+    });
     await this.prisma.userAvatar.deleteMany({ where: { userId } });
+    return rows.map((row) => row.storageKey);
   }
 }

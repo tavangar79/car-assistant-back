@@ -44,9 +44,13 @@ export class InMemoryDocumentFileRepository implements DocumentFileRepository {
     this.files.delete(id);
   }
 
-  async deleteByDocumentIds(documentIds: string[]): Promise<void> {
+  async deleteByDocumentIds(documentIds: string[]): Promise<string[]> {
+    const keys: string[] = [];
     for (const [id, file] of this.files) {
-      if (documentIds.includes(file.documentId)) this.files.delete(id);
+      if (!documentIds.includes(file.documentId)) continue;
+      keys.push(file.storageKey);
+      this.files.delete(id);
     }
+    return keys;
   }
 }

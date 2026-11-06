@@ -16,6 +16,12 @@ import {
   type VerifyOtpResult,
 } from './auth.types.ts';
 import type { AvatarRepository } from './avatar.repository.ts';
+import {
+  deleteFilesQuietly,
+  newStorageKey,
+  putThenSave,
+  type FileStorage,
+} from '../../lib/file-storage.ts';
 import { detectImageType } from '../../shared/image-type.ts';
 import type { OtpRepository } from './otp.repository.ts';
 import { otpHashesMatch, type CodeGenerator, type OtpHasher } from './otp-code.ts';
@@ -26,6 +32,8 @@ import type { UserRepository } from './user.repository.ts';
 export interface AuthServiceDeps {
   users: UserRepository;
   avatars: AvatarRepository;
+  /** Holds the avatar bytes; the row keeps only the key. */
+  files: FileStorage;
   otps: OtpRepository;
   sms: SmsSender;
   tokens: TokenService;
@@ -151,21 +159,28 @@ export class AuthService {
     if (!contentType) {
       throw new ValidationError({ avatar: ['Must be a JPEG, PNG or WebP image'] });
     }
-    const avatar = await this.deps.avatars.save(user.id, { contentType, data });
+    const { avatars, files } = this.deps;
+    const previous = await avatars.findByUserId(user.id);
+    const storageKey = newStorageKey(`avatars/${user.id}`, contentType);
+    const avatar = await putThenSave(files, { key: storageKey, bytes: data, contentType }, () =>
+      avatars.save(user.id, { contentType, storageKey, sizeBytes: data.byteLength }),
+    );
+    await deleteFilesQuietly(files, [previous?.storageKey]);
     return toPublicUser(user, avatar.updatedAt);
   }
 
   async getAvatar(userId: string): Promise<UserAvatar> {
     const user = await this.findUser(userId);
     const avatar = await this.deps.avatars.findByUserId(user.id);
-    if (!avatar) throw new NotFoundError('Avatar');
-    return avatar;
+    const data = avatar && (await this.deps.files.get(avatar.storageKey));
+    if (!avatar || !data) throw new NotFoundError('Avatar');
+    return { contentType: avatar.contentType, data, updatedAt: avatar.updatedAt };
   }
 
   /** Idempotent: deleting a missing avatar still succeeds. */
   async deleteAvatar(userId: string): Promise<PublicUser> {
     const user = await this.findUser(userId);
-    await this.deps.avatars.delete(user.id);
+    await deleteFilesQuietly(this.deps.files, await this.deps.avatars.delete(user.id));
     return toPublicUser(user, null);
   }
 

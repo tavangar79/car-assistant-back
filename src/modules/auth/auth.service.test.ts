@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSmsSender } from '../../test/fake-sms-sender.ts';
 import { JPEG_BYTES, PNG_BYTES } from '../../test/image-fixtures.ts';
 import { InMemoryAvatarRepository } from '../../test/in-memory-avatar.repository.ts';
+import { InMemoryFileStorage } from '../../test/in-memory-file-storage.ts';
 import { InMemoryOtpRepository } from '../../test/in-memory-otp.repository.ts';
 import { InMemoryUserRepository } from '../../test/in-memory-user.repository.ts';
 import { TEST_JWT_SECRET } from '../../test/test-dependencies.ts';
@@ -23,6 +24,7 @@ describe('AuthService', () => {
   let now: Date;
   let users: InMemoryUserRepository;
   let avatars: InMemoryAvatarRepository;
+  let files: InMemoryFileStorage;
   let otps: InMemoryOtpRepository;
   let sms: FakeSmsSender;
   let tokens: TokenService;
@@ -36,6 +38,7 @@ describe('AuthService', () => {
     new AuthService({
       users,
       avatars,
+      files,
       otps,
       sms,
       tokens,
@@ -58,6 +61,7 @@ describe('AuthService', () => {
     now = new Date('2026-01-01T00:00:00Z');
     users = new InMemoryUserRepository();
     avatars = new InMemoryAvatarRepository();
+    files = new InMemoryFileStorage();
     otps = new InMemoryOtpRepository();
     sms = new FakeSmsSender();
     tokens = new TokenService(TEST_JWT_SECRET, '30d');
@@ -443,6 +447,75 @@ describe('AuthService', () => {
       expect((await service.deleteAvatar(user.id)).avatarUrl).toBeNull();
       expect((await service.deleteAvatar(user.id)).avatarUrl).toBeNull();
       expect(avatars.avatars.size).toBe(0);
+    });
+
+    it('keeps the bytes in file storage under a server-made key, and the row only the key', async () => {
+      const user = await users.create(PHONE);
+
+      await service.uploadAvatar(user.id, PNG_BYTES);
+
+      const stored = avatars.avatars.get(user.id)!;
+      expect(stored).not.toHaveProperty('data');
+      expect(stored.storageKey).toMatch(new RegExp(`^avatars/${user.id}/[a-f\\d]{32}\\.png$`));
+      expect(stored.sizeBytes).toBe(PNG_BYTES.byteLength);
+      expect(files.files.get(stored.storageKey)).toEqual({
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+      });
+      expect((await service.getAvatar(user.id)).data).toEqual(PNG_BYTES);
+    });
+
+    it('deletes the old file once the replacement is saved', async () => {
+      const user = await users.create(PHONE);
+      await service.uploadAvatar(user.id, PNG_BYTES);
+      const oldKey = avatars.avatars.get(user.id)!.storageKey;
+
+      await service.uploadAvatar(user.id, JPEG_BYTES);
+
+      expect([...files.files.keys()]).toEqual([avatars.avatars.get(user.id)!.storageKey]);
+      expect(files.files.has(oldKey)).toBe(false);
+    });
+
+    it('removes the new file and keeps the old avatar when the database write fails', async () => {
+      const user = await users.create(PHONE);
+      await service.uploadAvatar(user.id, PNG_BYTES);
+      const oldKey = avatars.avatars.get(user.id)!.storageKey;
+      avatars.failSaves = true;
+
+      await expect(service.uploadAvatar(user.id, JPEG_BYTES)).rejects.toThrow('database is down');
+
+      expect([...files.files.keys()]).toEqual([oldKey]);
+      expect((await service.getAvatar(user.id)).data).toEqual(PNG_BYTES);
+    });
+
+    it('deletes the file with the avatar', async () => {
+      const user = await users.create(PHONE);
+      await service.uploadAvatar(user.id, PNG_BYTES);
+
+      await service.deleteAvatar(user.id);
+
+      expect(files.files.size).toBe(0);
+    });
+
+    it('still deletes the avatar (and logs) when the file delete fails', async () => {
+      const user = await users.create(PHONE);
+      await service.uploadAvatar(user.id, PNG_BYTES);
+      files.failDeletes = true;
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect((await service.deleteAvatar(user.id)).avatarUrl).toBeNull();
+
+      expect(avatars.avatars.size).toBe(0);
+      expect(log).toHaveBeenCalledOnce();
+      log.mockRestore();
+    });
+
+    it('returns 404 from getAvatar when the row exists but its file is gone', async () => {
+      const user = await users.create(PHONE);
+      await service.uploadAvatar(user.id, PNG_BYTES);
+      files.files.clear();
+
+      await expect(service.getAvatar(user.id)).rejects.toMatchObject({ statusCode: 404 });
     });
 
     it.each([

@@ -93,10 +93,13 @@ describe('records of a previous owner', () => {
   });
 
   it('still lets the new owner read a locked record’s invoice', async () => {
+    const storageKey = `service-invoices/${serviceId}/invoice.jpg`;
+    await garage.repositories.fileStorage.put(storageKey, JPEG_BYTES, 'image/jpeg');
     await garage.repositories.serviceInvoiceRepository.save(serviceId, {
       fileName: 'invoice.jpg',
       contentType: 'image/jpeg',
-      data: JPEG_BYTES,
+      sizeBytes: JPEG_BYTES.byteLength,
+      storageKey,
     });
     await as().get(`${servicePath()}/invoice`).expect(200);
   });

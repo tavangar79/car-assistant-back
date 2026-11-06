@@ -4,6 +4,9 @@ coverage/
 .env
 *.log
 
+# Uploaded files (UPLOAD_DIR)
+uploads/
+
 # Claude Code (personal)
 .claude/settings.local.json
 

@@ -119,10 +119,19 @@ export interface Vehicle {
   updatedAt: Date;
 }
 
+/** The photo with its bytes, ready to send. */
 export interface VehiclePhoto {
   contentType: string;
   data: Uint8Array;
   updatedAt: Date;
 }
 
-export type NewVehiclePhoto = Omit<VehiclePhoto, 'updatedAt'>;
+/** The photo row: its bytes live in FileStorage under `storageKey`. */
+export interface StoredVehiclePhoto {
+  contentType: string;
+  storageKey: string;
+  sizeBytes: number;
+  updatedAt: Date;
+}
+
+export type NewVehiclePhoto = Omit<StoredVehiclePhoto, 'updatedAt'>;

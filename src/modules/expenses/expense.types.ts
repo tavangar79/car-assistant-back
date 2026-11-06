@@ -65,11 +65,17 @@ export interface ExpenseAttachmentMeta {
   updatedAt: Date;
 }
 
+/** The attachment with its bytes, ready to send. */
 export interface ExpenseAttachment extends ExpenseAttachmentMeta {
   data: Uint8Array;
 }
 
-export type NewExpenseAttachment = Omit<ExpenseAttachment, 'updatedAt' | 'sizeBytes'>;
+/** The attachment row: its bytes live in FileStorage under `storageKey`. */
+export interface StoredExpenseAttachment extends ExpenseAttachmentMeta {
+  storageKey: string;
+}
+
+export type NewExpenseAttachment = Omit<StoredExpenseAttachment, 'updatedAt'>;
 
 /** An expense as exposed by the API. */
 export interface Expense extends ExpenseRecord {

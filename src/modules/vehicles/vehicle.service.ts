@@ -1,3 +1,9 @@
+import {
+  deleteFilesQuietly,
+  newStorageKey,
+  putThenSave,
+  type FileStorage,
+} from '../../lib/file-storage.ts';
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../../shared/errors.ts';
 import { detectImageType, type ImageContentType } from '../../shared/image-type.ts';
 import type { DocumentFileRepository } from '../documents/document-file.repository.ts';
@@ -37,6 +43,8 @@ export interface VehicleServiceDeps {
   documents: DocumentRepository;
   documentFiles: DocumentFileRepository;
   notifications: NotificationRepository;
+  /** Holds the photo, invoice, attachment and document bytes; rows keep only the keys. */
+  files: FileStorage;
   catalog: VehicleCatalog;
   now: () => Date;
 }
@@ -151,7 +159,7 @@ export class VehicleService {
   /**
    * Deletes the photo, odometer readings, service visits (with invoices), interval overrides,
    * fuel logs, expenses (with attachments), documents (with files) and notifications too. If the default goes, the newest remaining
-   * vehicle becomes default.
+   * vehicle becomes default. Stored files are deleted last, once their rows are gone.
    */
   async remove(userId: string, id: string): Promise<void> {
     const {
@@ -167,20 +175,22 @@ export class VehicleService {
       documents,
       documentFiles,
       notifications,
+      files,
     } = this.deps;
     const existing = await this.findOwned(userId, id);
-    await photos.delete(existing.id);
+    const keys = await photos.delete(existing.id);
     await readings.deleteByVehicle(existing.id);
     const serviceIds = await serviceVisits.deleteByVehicle(existing.id);
-    await serviceInvoices.deleteByServiceIds(serviceIds);
+    keys.push(...(await serviceInvoices.deleteByServiceIds(serviceIds)));
     await serviceIntervals.deleteByVehicle(existing.id);
     await fuelLogs.deleteByVehicle(existing.id);
     const expenseIds = await expenses.deleteByVehicle(existing.id);
-    await expenseAttachments.deleteByExpenseIds(expenseIds);
+    keys.push(...(await expenseAttachments.deleteByExpenseIds(expenseIds)));
     const documentIds = await documents.deleteByVehicle(existing.id);
-    await documentFiles.deleteByDocumentIds(documentIds);
+    keys.push(...(await documentFiles.deleteByDocumentIds(documentIds)));
     await notifications.deleteByVehicle(existing.id);
     await vehicles.deleteAndPromote(userId, existing.id);
+    await deleteFilesQuietly(files, keys);
   }
 
   /** Stores (or replaces) the photo. The type comes from the magic bytes, not the client. */
@@ -188,21 +198,28 @@ export class VehicleService {
     const existing = await this.findOwned(userId, id);
     const contentType = detectImageType(data, VEHICLE_PHOTO_CONTENT_TYPES);
     if (!contentType) throw new ValidationError({ photo: [VEHICLE_PHOTO_BAD_TYPE] });
-    const photo = await this.deps.photos.save(existing.id, { contentType, data });
+    const { photos, files } = this.deps;
+    const previous = await photos.findByVehicleId(existing.id);
+    const storageKey = newStorageKey(`vehicle-photos/${existing.id}`, contentType);
+    const photo = await putThenSave(files, { key: storageKey, bytes: data, contentType }, () =>
+      photos.save(existing.id, { contentType, storageKey, sizeBytes: data.byteLength }),
+    );
+    await deleteFilesQuietly(files, [previous?.storageKey]);
     return this.toVehicle(existing, photo.updatedAt);
   }
 
   async getPhoto(userId: string, id: string): Promise<VehiclePhoto> {
     const existing = await this.findOwned(userId, id);
     const photo = await this.deps.photos.findByVehicleId(existing.id);
-    if (!photo) throw new NotFoundError('Photo');
-    return photo;
+    const data = photo && (await this.deps.files.get(photo.storageKey));
+    if (!photo || !data) throw new NotFoundError('Photo');
+    return { contentType: photo.contentType, data, updatedAt: photo.updatedAt };
   }
 
   /** Idempotent: deleting a missing photo still succeeds. */
   async deletePhoto(userId: string, id: string): Promise<Vehicle> {
     const existing = await this.findOwned(userId, id);
-    await this.deps.photos.delete(existing.id);
+    await deleteFilesQuietly(this.deps.files, await this.deps.photos.delete(existing.id));
     return this.toVehicle(existing, null);
   }
 

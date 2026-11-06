@@ -79,11 +79,17 @@ export interface ServiceInvoiceMeta {
   updatedAt: Date;
 }
 
+/** The invoice with its bytes, ready to send. */
 export interface ServiceInvoice extends ServiceInvoiceMeta {
   data: Uint8Array;
 }
 
-export type NewServiceInvoice = Omit<ServiceInvoice, 'updatedAt' | 'sizeBytes'>;
+/** The invoice row: its bytes live in FileStorage under `storageKey`. */
+export interface StoredServiceInvoice extends ServiceInvoiceMeta {
+  storageKey: string;
+}
+
+export type NewServiceInvoice = Omit<StoredServiceInvoice, 'updatedAt'>;
 
 /** Values typed before across the caller's garage, most recent `serviceDate` first, at most 10 each. */
 export interface ServiceSuggestions {

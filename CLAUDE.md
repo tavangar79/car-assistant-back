@@ -31,8 +31,21 @@ by the car-assistant manager repo, whose CTO sends tasks with an API contract.
 | Build             | `npm run build`                              |
 | Seed catalog      | `npm run catalog:seed` (adds missing global rows only) |
 | Admin account     | `npm run admin:setup -- <username>` (replaces every admin; hidden password prompt; prints the TOTP secret + QR) |
+| Move files out of Mongo | `npm run files:migrate` (one-off; copies legacy `data` bytes into `UPLOAD_DIR`, then unsets them; safe to re-run) |
 
 **Definition of done:** `npm test && npm run typecheck && npm run lint` all pass.
+
+## File storage
+- File bytes never go into MongoDB. They live in a `FileStorage` (`src/lib/file-storage.ts`: `put` / `get` / `delete`),
+  injected as `AppDependencies.fileStorage`. Production uses `LocalFileStorage` rooted at `UPLOAD_DIR`
+  (default `./uploads`, gitignored); tests use `src/test/in-memory-file-storage.ts`. An S3-compatible store
+  can replace it later by implementing the same interface.
+- File rows keep `storageKey` + `sizeBytes` (+ `contentType`, `fileName`). Keys come from `newStorageKey(folder, type)`,
+  never from a client filename; `LocalFileStorage` rejects keys that escape the root.
+- Write order (services): `putThenSave` writes the file, then the row, and removes the new file if the row fails;
+  the old file is deleted after. Deletes remove rows first, then files via `deleteFilesQuietly` (logs, never throws).
+- Document files are encrypted (`lib/file-crypto.ts`) before `put`, so only ciphertext reaches storage.
+- The admin collection browser never shows `storageKey`.
 
 ## Structure
 ```

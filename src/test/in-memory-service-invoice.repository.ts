@@ -1,8 +1,8 @@
 import type { ServiceInvoiceRepository } from '../modules/service-visits/service-invoice.repository.ts';
 import type {
   NewServiceInvoice,
-  ServiceInvoice,
   ServiceInvoiceMeta,
+  StoredServiceInvoice,
 } from '../modules/service-visits/service-visit.types.ts';
 
 const toMeta = ({
@@ -10,7 +10,7 @@ const toMeta = ({
   contentType,
   sizeBytes,
   updatedAt,
-}: ServiceInvoice): ServiceInvoiceMeta => ({
+}: StoredServiceInvoice): ServiceInvoiceMeta => ({
   fileName,
   contentType,
   sizeBytes,
@@ -18,11 +18,11 @@ const toMeta = ({
 });
 
 export class InMemoryServiceInvoiceRepository implements ServiceInvoiceRepository {
-  readonly invoices = new Map<string, ServiceInvoice>();
+  readonly invoices = new Map<string, StoredServiceInvoice>();
   /** Each save is 1 ms later than the previous one, so `invoiceUrl` always changes. */
   private clock = Date.UTC(2026, 0, 1);
 
-  async findByServiceId(serviceId: string): Promise<ServiceInvoice | null> {
+  async findByServiceId(serviceId: string): Promise<StoredServiceInvoice | null> {
     return this.invoices.get(serviceId) ?? null;
   }
 
@@ -36,16 +36,18 @@ export class InMemoryServiceInvoiceRepository implements ServiceInvoiceRepositor
   }
 
   async save(serviceId: string, invoice: NewServiceInvoice): Promise<ServiceInvoiceMeta> {
-    const saved: ServiceInvoice = {
-      ...invoice,
-      sizeBytes: invoice.data.byteLength,
-      updatedAt: new Date(this.clock++),
-    };
+    const saved: StoredServiceInvoice = { ...invoice, updatedAt: new Date(this.clock++) };
     this.invoices.set(serviceId, saved);
     return toMeta(saved);
   }
 
-  async deleteByServiceIds(serviceIds: string[]): Promise<void> {
-    for (const id of serviceIds) this.invoices.delete(id);
+  async deleteByServiceIds(serviceIds: string[]): Promise<string[]> {
+    const keys: string[] = [];
+    for (const id of serviceIds) {
+      const invoice = this.invoices.get(id);
+      if (invoice) keys.push(invoice.storageKey);
+      this.invoices.delete(id);
+    }
+    return keys;
   }
 }

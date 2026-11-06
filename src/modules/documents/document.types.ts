@@ -64,9 +64,9 @@ export interface DocumentFileMeta {
   createdAt: Date;
 }
 
-/** A file as stored: `data` is the encrypted blob. */
+/** A file row: the encrypted blob lives in FileStorage under `storageKey`. */
 export interface DocumentFileRecord extends DocumentFileMeta {
-  data: Uint8Array;
+  storageKey: string;
 }
 
 export type NewDocumentFile = Omit<DocumentFileRecord, 'id' | 'createdAt'>;

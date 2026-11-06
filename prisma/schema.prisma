@@ -72,12 +72,14 @@ enum VehicleColor {
   beige
 }
 
-// Vehicle photo, one per vehicle; an upload replaces it. Bytes stay out of `vehicles` so vehicle reads stay small.
+// Vehicle photo, one per vehicle; an upload replaces it. The bytes live in FileStorage under `storageKey`.
 model VehiclePhoto {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   vehicleId   String   @unique @db.ObjectId
   contentType String
-  data        Bytes
+  /// FileStorage key (see lib/file-storage.ts). Never shown by the admin browser.
+  storageKey  String
+  sizeBytes   Int
   updatedAt   DateTime @updatedAt
 
   @@map("vehicle_photos")
@@ -128,15 +130,15 @@ type ServiceLineItem {
   nextDueMonths Int?
 }
 
-// Invoice photo, one per visit; an upload replaces it. Bytes stay out of `service_visits` so list reads stay small.
-// `sizeBytes` is stored so the visit JSON can report it without loading the bytes.
+// Invoice photo, one per visit; an upload replaces it. The bytes live in FileStorage under `storageKey`.
 model ServiceInvoice {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   serviceId   String   @unique @db.ObjectId
   fileName    String
   contentType String
   sizeBytes   Int
-  data        Bytes
+  /// FileStorage key (see lib/file-storage.ts). Never shown by the admin browser.
+  storageKey  String
   updatedAt   DateTime @updatedAt
 
   @@map("service_invoices")
@@ -193,7 +195,7 @@ model Expense {
   @@map("expenses")
 }
 
-// Attached receipt or policy, one per expense; an upload replaces it. Bytes stay out of `expenses` so list reads stay small.
+// Attached receipt or policy, one per expense; an upload replaces it. The bytes live in FileStorage under `storageKey`.
 model ExpenseAttachment {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   expenseId   String   @unique @db.ObjectId
@@ -201,7 +203,8 @@ model ExpenseAttachment {
   /// application/pdf | image/jpeg | image/png
   contentType String
   sizeBytes   Int
-  data        Bytes
+  /// FileStorage key (see lib/file-storage.ts). Never shown by the admin browser.
+  storageKey  String
   updatedAt   DateTime @updatedAt
 
   @@map("expense_attachments")
@@ -229,7 +232,7 @@ model VehicleDocument {
   @@map("vehicle_documents")
 }
 
-// Up to 4 files per document (checked by DocumentService). Bytes are encrypted at rest.
+// Up to 4 files per document (checked by DocumentService). Encrypted, then stored in FileStorage under `storageKey`.
 model VehicleDocumentFile {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   documentId  String   @db.ObjectId
@@ -238,8 +241,8 @@ model VehicleDocumentFile {
   contentType String
   /// Plaintext size.
   sizeBytes   Int
-  /// AES-256-GCM: iv(12) | authTag(16) | ciphertext.
-  data        Bytes
+  /// FileStorage key of the AES-256-GCM blob: iv(12) | authTag(16) | ciphertext. Never shown by the admin browser.
+  storageKey  String
   createdAt   DateTime @default(now())
 
   @@index([documentId])
@@ -381,12 +384,14 @@ model OtpRequest {
   @@map("otp_requests")
 }
 
-// Profile photo, one per user; an upload replaces it. Bytes stay out of `users` so user reads stay small.
+// Profile photo, one per user; an upload replaces it. The bytes live in FileStorage under `storageKey`.
 model UserAvatar {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   userId      String   @unique @db.ObjectId
   contentType String
-  data        Bytes
+  /// FileStorage key (see lib/file-storage.ts). Never shown by the admin browser.
+  storageKey  String
+  sizeBytes   Int
   updatedAt   DateTime @updatedAt
 
   @@map("user_avatars")

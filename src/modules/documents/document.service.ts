@@ -1,4 +1,10 @@
 import { decryptBytes, encryptBytes } from '../../lib/file-crypto.ts';
+import {
+  deleteFilesQuietly,
+  newStorageKey,
+  putThenSave,
+  type FileStorage,
+} from '../../lib/file-storage.ts';
 import { AppError, NotFoundError, ValidationError } from '../../shared/errors.ts';
 import { detectFileType, type FileContentType } from '../../shared/file-type.ts';
 import type { NotificationRepository } from '../notifications/notification.repository.ts';
@@ -18,6 +24,8 @@ import type {
 export interface DocumentServiceDeps {
   documents: DocumentRepository;
   files: DocumentFileRepository;
+  /** Holds the encrypted file blobs; rows keep only the keys. Plaintext never reaches it. */
+  storage: FileStorage;
   /** A deleted document's notifications go too. */
   notifications: NotificationRepository;
   /** Ownership checks come from here. */
@@ -37,6 +45,7 @@ export const DOCUMENT_TOO_MANY_FILES = `A document can have at most ${DOCUMENT_M
 export const EXPIRES_AFTER_ISSUED = 'Must be after issuedAt';
 
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
+const ENCRYPTED_CONTENT_TYPE = 'application/octet-stream';
 
 export interface FileUpload {
   fileName: string;
@@ -141,9 +150,10 @@ export class DocumentService {
   /** Deletes its files and notifications too. */
   async remove(userId: string, vehicleId: string, documentId: string): Promise<void> {
     const document = await this.findOwned(userId, vehicleId, documentId);
-    await this.deps.files.deleteByDocumentIds([document.id]);
+    const keys = await this.deps.files.deleteByDocumentIds([document.id]);
     await this.deps.notifications.deleteByRefIds([document.id]);
     await this.deps.documents.delete(document.id);
+    await deleteFilesQuietly(this.deps.storage, keys);
   }
 
   /** Adds a file (encrypted at rest). The type comes from the magic bytes, not the client. */
@@ -160,13 +170,19 @@ export class DocumentService {
       throw new AppError(422, DOCUMENT_TOO_MANY_FILES, { file: [DOCUMENT_TOO_MANY_FILES] });
     }
 
-    await this.deps.files.create({
-      documentId: document.id,
-      fileName,
-      contentType,
-      sizeBytes: data.byteLength,
-      data: encryptBytes(this.deps.encryptionKey, data),
-    });
+    // Only ciphertext is stored, so the key gets `.bin` whatever the file type.
+    const storageKey = newStorageKey(`vehicle-documents/${document.id}`, ENCRYPTED_CONTENT_TYPE);
+    const blob = encryptBytes(this.deps.encryptionKey, data);
+    const file = { key: storageKey, bytes: blob, contentType: ENCRYPTED_CONTENT_TYPE };
+    await putThenSave(this.deps.storage, file, () =>
+      this.deps.files.create({
+        documentId: document.id,
+        fileName,
+        contentType,
+        sizeBytes: data.byteLength,
+        storageKey,
+      }),
+    );
     return this.withFiles(document);
   }
 
@@ -179,10 +195,12 @@ export class DocumentService {
   ): Promise<DocumentFileContent> {
     const document = await this.findOwned(userId, vehicleId, documentId);
     const file = await this.findFile(document.id, fileId);
+    const blob = await this.deps.storage.get(file.storageKey);
+    if (!blob) throw new NotFoundError('File');
     return {
       fileName: file.fileName,
       contentType: file.contentType,
-      data: decryptBytes(this.deps.encryptionKey, file.data),
+      data: decryptBytes(this.deps.encryptionKey, blob),
     };
   }
 
@@ -195,6 +213,7 @@ export class DocumentService {
     const document = await this.findOwned(userId, vehicleId, documentId);
     const file = await this.findFile(document.id, fileId);
     await this.deps.files.delete(file.id);
+    await deleteFilesQuietly(this.deps.storage, [file.storageKey]);
     return this.withFiles(document);
   }
 

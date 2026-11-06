@@ -12,6 +12,7 @@ import { InMemoryServiceIntervalRepository } from '../../test/in-memory-service-
 import { InMemoryServiceInvoiceRepository } from '../../test/in-memory-service-invoice.repository.ts';
 import { InMemoryServiceVisitRepository } from '../../test/in-memory-service-visit.repository.ts';
 import { InMemoryVehiclePhotoRepository } from '../../test/in-memory-vehicle-photo.repository.ts';
+import { InMemoryFileStorage } from '../../test/in-memory-file-storage.ts';
 import { InMemoryVehicleRepository } from '../../test/in-memory-vehicle.repository.ts';
 import { VEHICLE_CATALOG } from '../vehicle-catalog/vehicle-catalog.data.ts';
 import { VehicleCatalog } from '../vehicle-catalog/vehicle-catalog.ts';
@@ -57,6 +58,7 @@ describe('ExpenseService', () => {
   let expenses: InMemoryExpenseRepository;
   let attachments: InMemoryExpenseAttachmentRepository;
   let notifications: InMemoryNotificationRepository;
+  let files: InMemoryFileStorage;
   let vehicleService: VehicleService;
   let service: ExpenseService;
   let vehicleId: string;
@@ -66,6 +68,7 @@ describe('ExpenseService', () => {
     expenses = new InMemoryExpenseRepository();
     attachments = new InMemoryExpenseAttachmentRepository();
     notifications = new InMemoryNotificationRepository();
+    files = new InMemoryFileStorage();
     vehicleService = new VehicleService({
       vehicles,
       photos: new InMemoryVehiclePhotoRepository(),
@@ -79,10 +82,12 @@ describe('ExpenseService', () => {
       documents: new InMemoryDocumentRepository(),
       documentFiles: new InMemoryDocumentFileRepository(),
       notifications,
+      files,
       catalog: new VehicleCatalog(VEHICLE_CATALOG),
       now: () => NOW,
     });
     service = new ExpenseService({
+      files,
       expenses,
       attachments,
       notifications,
@@ -327,6 +332,7 @@ describe('ExpenseService', () => {
 
       expect(expenses.expenses.size).toBe(0);
       expect(attachments.attachments.size).toBe(0);
+      expect(files.files.size).toBe(0);
     });
 
     it("deletes the expense's notifications only", async () => {
@@ -416,6 +422,20 @@ describe('ExpenseService', () => {
 
       expect(second.attachmentUrl).not.toBe(first.attachmentUrl);
       expect(attachments.attachments.size).toBe(1);
+      expect([...files.files.keys()]).toEqual([attachments.attachments.get(expenseId)!.storageKey]);
+    });
+
+    it('stores the bytes in file storage and getAttachment reads them back', async () => {
+      await service.uploadAttachment(ALICE, vehicleId, expenseId, {
+        fileName: 'a',
+        data: PDF_BYTES,
+      });
+
+      const { storageKey } = attachments.attachments.get(expenseId)!;
+      expect(storageKey).toMatch(
+        new RegExp(`^expense-attachments/${expenseId}/[a-f\\d]{32}\\.pdf$`),
+      );
+      expect((await service.getAttachment(ALICE, vehicleId, expenseId)).data).toEqual(PDF_BYTES);
     });
 
     it('getAttachment returns 404 without an attachment', async () => {
@@ -436,6 +456,7 @@ describe('ExpenseService', () => {
       expect(expense).toMatchObject({ id: expenseId, attachment: null, attachmentUrl: null });
       expect(again.attachment).toBeNull();
       expect(attachments.attachments.size).toBe(0);
+      expect(files.files.size).toBe(0);
     });
 
     it("returns 404 for another user's vehicle", async () => {

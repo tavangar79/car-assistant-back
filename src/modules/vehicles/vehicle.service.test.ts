@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../../shared/errors.ts';
 import { JPEG_BYTES, PDF_BYTES, PNG_BYTES, WEBP_BYTES } from '../../test/image-fixtures.ts';
 import { InMemoryDocumentFileRepository } from '../../test/in-memory-document-file.repository.ts';
@@ -12,6 +12,7 @@ import { InMemoryServiceIntervalRepository } from '../../test/in-memory-service-
 import { InMemoryServiceInvoiceRepository } from '../../test/in-memory-service-invoice.repository.ts';
 import { InMemoryServiceVisitRepository } from '../../test/in-memory-service-visit.repository.ts';
 import { InMemoryVehiclePhotoRepository } from '../../test/in-memory-vehicle-photo.repository.ts';
+import { InMemoryFileStorage } from '../../test/in-memory-file-storage.ts';
 import { InMemoryVehicleRepository } from '../../test/in-memory-vehicle.repository.ts';
 import { VEHICLE_CATALOG } from '../vehicle-catalog/vehicle-catalog.data.ts';
 import { VehicleCatalog } from '../vehicle-catalog/vehicle-catalog.ts';
@@ -64,6 +65,7 @@ describe('VehicleService', () => {
   let documents: InMemoryDocumentRepository;
   let documentFiles: InMemoryDocumentFileRepository;
   let notifications: InMemoryNotificationRepository;
+  let files: InMemoryFileStorage;
   let service: VehicleService;
 
   beforeEach(() => {
@@ -79,6 +81,7 @@ describe('VehicleService', () => {
     documents = new InMemoryDocumentRepository();
     documentFiles = new InMemoryDocumentFileRepository();
     notifications = new InMemoryNotificationRepository();
+    files = new InMemoryFileStorage();
     service = new VehicleService({
       vehicles,
       photos,
@@ -92,6 +95,7 @@ describe('VehicleService', () => {
       documents,
       documentFiles,
       notifications,
+      files,
       catalog: new VehicleCatalog(VEHICLE_CATALOG),
       now: () => NOW,
     });
@@ -209,6 +213,7 @@ describe('VehicleService', () => {
         documents,
         documentFiles,
         notifications,
+        files,
         catalog: new VehicleCatalog(VEHICLE_CATALOG),
         now: () => new Date('2026-03-20T12:00:00Z'), // Still 1404 in Tehran.
       });
@@ -381,6 +386,47 @@ describe('VehicleService', () => {
 
       expect(await service.list(ALICE)).toEqual([]);
       expect(photos.photos.size).toBe(0);
+      expect(files.files.size).toBe(0);
+    });
+
+    it('deletes the files of every removed record, but not those of other vehicles', async () => {
+      const removed = await service.create(ALICE, vehicleInput({ plate: plate('100') }));
+      const kept = await service.create(ALICE, vehicleInput({ plate: plate('200') }));
+      await service.uploadPhoto(ALICE, removed.id, PNG_BYTES);
+      await service.uploadPhoto(ALICE, kept.id, PNG_BYTES);
+      const visit = await serviceVisits.create({
+        vehicleId: removed.id,
+        serviceDate: NOW,
+        odometerKm: 1000,
+        workshop: 'x',
+        notes: null,
+        lineItems: [],
+        totalCost: 0,
+      });
+      await files.put('service-invoices/v/a.png', PNG_BYTES, 'image/png');
+      await serviceInvoices.save(visit.id, {
+        fileName: 'a.png',
+        contentType: 'image/png',
+        sizeBytes: 9,
+        storageKey: 'service-invoices/v/a.png',
+      });
+
+      await service.remove(ALICE, removed.id);
+
+      expect([...files.files.keys()]).toEqual([photos.photos.get(kept.id)!.storageKey]);
+    });
+
+    it('still removes the vehicle when deleting its files fails', async () => {
+      const created = await service.create(ALICE, vehicleInput());
+      await service.uploadPhoto(ALICE, created.id, PNG_BYTES);
+      files.failDeletes = true;
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await service.remove(ALICE, created.id);
+
+      expect(await service.list(ALICE)).toEqual([]);
+      expect(log).toHaveBeenCalledOnce();
+      log.mockRestore();
     });
 
     it('removes its odometer readings but not those of other vehicles', async () => {
@@ -408,10 +454,13 @@ describe('VehicleService', () => {
           lineItems: [],
           totalCost: 0,
         });
+        const storageKey = `service-invoices/${visit.id}/a.png`;
+        await files.put(storageKey, PNG_BYTES, 'image/png');
         await serviceInvoices.save(visit.id, {
           fileName: 'a.png',
           contentType: 'image/png',
-          data: PNG_BYTES,
+          sizeBytes: PNG_BYTES.byteLength,
+          storageKey,
         });
         await serviceIntervals.save({ vehicleId, intervalId: 'engine_oil', km: 7000, months: 6 });
         return visit;
@@ -455,10 +504,13 @@ describe('VehicleService', () => {
           paymentMethod: null,
           issuer: null,
         });
+        const storageKey = `expense-attachments/${expense.id}/a.pdf`;
+        await files.put(storageKey, PDF_BYTES, 'application/pdf');
         await expenseAttachments.save(expense.id, {
           fileName: 'a.pdf',
           contentType: 'application/pdf',
-          data: PDF_BYTES,
+          sizeBytes: PDF_BYTES.byteLength,
+          storageKey,
         });
         return { log, expense };
       };
@@ -487,12 +539,14 @@ describe('VehicleService', () => {
           expiryReminder: true,
           notes: null,
         });
+        const storageKey = `vehicle-documents/${document.id}/card.bin`;
+        await files.put(storageKey, PNG_BYTES, 'application/octet-stream');
         const file = await documentFiles.create({
           documentId: document.id,
           fileName: 'card.png',
           contentType: 'image/png',
           sizeBytes: 9,
-          data: PNG_BYTES,
+          storageKey,
         });
         await notifications.createMany([
           {

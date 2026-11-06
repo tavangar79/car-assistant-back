@@ -1,3 +1,9 @@
+import {
+  deleteFilesQuietly,
+  newStorageKey,
+  putThenSave,
+  type FileStorage,
+} from '../../lib/file-storage.ts';
 import { NotFoundError, ValidationError } from '../../shared/errors.ts';
 import {
   detectImageType,
@@ -26,6 +32,8 @@ import type {
 export interface ServiceVisitServiceDeps {
   visits: ServiceVisitRepository;
   invoices: ServiceInvoiceRepository;
+  /** Holds the invoice bytes; the row keeps only the key. */
+  files: FileStorage;
   /** Ownership checks and the vehicle's current mileage come from here. */
   vehicles: VehicleService;
   /** Raises `Vehicle.mileageKm` when a visit's odometer is higher. */
@@ -158,8 +166,9 @@ export class ServiceVisitService {
   /** Deletes the invoice too. Never changes the vehicle's mileage. */
   async remove(userId: string, vehicleId: string, serviceId: string): Promise<void> {
     const { visit } = await this.findWritable(userId, vehicleId, serviceId);
-    await this.deps.invoices.deleteByServiceIds([visit.id]);
+    const keys = await this.deps.invoices.deleteByServiceIds([visit.id]);
     await this.deps.visits.delete(visit.id);
+    await deleteFilesQuietly(this.deps.files, keys);
   }
 
   /** Stores (or replaces) the invoice photo. The type comes from the magic bytes, not the client. */
@@ -172,21 +181,30 @@ export class ServiceVisitService {
     const { vehicle, visit } = await this.findWritable(userId, vehicleId, serviceId);
     const contentType = detectImageType(data, SERVICE_INVOICE_CONTENT_TYPES);
     if (!contentType) throw new ValidationError({ invoice: [SERVICE_INVOICE_BAD_TYPE] });
-    const meta = await this.deps.invoices.save(visit.id, { fileName, contentType, data });
+    const { invoices, files } = this.deps;
+    const previous = await invoices.findByServiceId(visit.id);
+    const storageKey = newStorageKey(`service-invoices/${visit.id}`, contentType);
+    const meta = await putThenSave(files, { key: storageKey, bytes: data, contentType }, () =>
+      invoices.save(visit.id, { fileName, contentType, storageKey, sizeBytes: data.byteLength }),
+    );
+    await deleteFilesQuietly(files, [previous?.storageKey]);
     return toServiceVisit(visit, meta, vehicle.ownedSince);
   }
 
   async getInvoice(userId: string, vehicleId: string, serviceId: string): Promise<ServiceInvoice> {
     const { visit } = await this.findOwned(userId, vehicleId, serviceId);
     const invoice = await this.deps.invoices.findByServiceId(visit.id);
-    if (!invoice) throw new NotFoundError('Invoice');
-    return invoice;
+    const data = invoice && (await this.deps.files.get(invoice.storageKey));
+    if (!invoice || !data) throw new NotFoundError('Invoice');
+    const { fileName, contentType, sizeBytes, updatedAt } = invoice;
+    return { fileName, contentType, sizeBytes, updatedAt, data };
   }
 
   /** Idempotent: deleting a missing invoice still succeeds. */
   async deleteInvoice(userId: string, vehicleId: string, serviceId: string): Promise<ServiceVisit> {
     const { vehicle, visit } = await this.findWritable(userId, vehicleId, serviceId);
-    await this.deps.invoices.deleteByServiceIds([visit.id]);
+    const keys = await this.deps.invoices.deleteByServiceIds([visit.id]);
+    await deleteFilesQuietly(this.deps.files, keys);
     return toServiceVisit(visit, null, vehicle.ownedSince);
   }
 

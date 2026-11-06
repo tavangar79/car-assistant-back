@@ -12,6 +12,7 @@ import { InMemoryDocumentFileRepository } from './in-memory-document-file.reposi
 import { InMemoryDocumentRepository } from './in-memory-document.repository.ts';
 import { InMemoryExpenseAttachmentRepository } from './in-memory-expense-attachment.repository.ts';
 import { InMemoryExpenseRepository } from './in-memory-expense.repository.ts';
+import { InMemoryFileStorage } from './in-memory-file-storage.ts';
 import { InMemoryFuelLogRepository } from './in-memory-fuel-log.repository.ts';
 import { InMemoryNotificationRepository } from './in-memory-notification.repository.ts';
 import { InMemoryOdometerReadingRepository } from './in-memory-odometer.repository.ts';
@@ -36,7 +37,9 @@ const lineItem = (itemId: string, cost: number): ServiceLineItem => ({
  */
 export function createGarage(now: Date) {
   const vehicleRepository = new InMemoryVehicleRepository();
+  const fileStorage = new InMemoryFileStorage();
   const repositories = {
+    fileStorage,
     vehicleRepository,
     vehiclePhotoRepository: new InMemoryVehiclePhotoRepository(),
     odometerReadingRepository: new InMemoryOdometerReadingRepository(vehicleRepository),
@@ -66,6 +69,7 @@ export function createGarage(now: Date) {
     documents: repositories.documentRepository,
     documentFiles: repositories.documentFileRepository,
     notifications: repositories.notificationRepository,
+    files: fileStorage,
     catalog: new VehicleCatalog(VEHICLE_CATALOG),
     now: () => now,
   });
@@ -105,10 +109,13 @@ export function createGarage(now: Date) {
         totalCost: lineItems.reduce((sum, item) => sum + item.cost, 0),
       });
       if (invoice) {
+        const storageKey = `service-invoices/${visit.id}/seed.jpg`;
+        await fileStorage.put(storageKey, JPEG_BYTES, 'image/jpeg');
         await repositories.serviceInvoiceRepository.save(visit.id, {
           fileName: 'invoice.jpg',
           contentType: 'image/jpeg',
-          data: JPEG_BYTES,
+          sizeBytes: JPEG_BYTES.byteLength,
+          storageKey,
         });
       }
       return visit.id;
@@ -155,10 +162,13 @@ export function createGarage(now: Date) {
         ...overrides,
       });
       if (attachment) {
+        const storageKey = `expense-attachments/${expense.id}/seed.pdf`;
+        await fileStorage.put(storageKey, PDF_BYTES, 'application/pdf');
         await repositories.expenseAttachmentRepository.save(expense.id, {
           fileName: 'policy.pdf',
           contentType: 'application/pdf',
-          data: PDF_BYTES,
+          sizeBytes: PDF_BYTES.byteLength,
+          storageKey,
         });
       }
       return expense.id;

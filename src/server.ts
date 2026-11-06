@@ -1,5 +1,6 @@
 import { createApp } from './app.ts';
 import { loadEnv } from './config/env.ts';
+import { LocalFileStorage } from './lib/local-file-storage.ts';
 import { createPrismaClient } from './lib/prisma.ts';
 import { ADMIN_LOGIN_RATE_LIMIT } from './modules/admin/admin-auth.service.ts';
 import { PrismaAdminRepository } from './modules/admin/admin.repository.ts';
@@ -41,6 +42,7 @@ const intervalDefRepository = new PrismaIntervalDefRepository(prisma);
 await seedEmptyCatalog(serviceItemDefRepository, intervalDefRepository);
 
 const app = createApp({
+  fileStorage: new LocalFileStorage(env.UPLOAD_DIR),
   vehicleRepository: new PrismaVehicleRepository(prisma),
   vehiclePhotoRepository: new PrismaVehiclePhotoRepository(prisma),
   vehiclePhotoMaxBytes: VEHICLE_PHOTO_MAX_BYTES,

@@ -43,6 +43,7 @@ describe('DocumentService', () => {
     service = new DocumentService({
       documents: garage.repositories.documentRepository,
       files: garage.repositories.documentFileRepository,
+      storage: garage.repositories.fileStorage,
       notifications: garage.repositories.notificationRepository,
       vehicles: garage.vehicleService,
       encryptionKey: TEST_ENCRYPTION_KEY,
@@ -278,6 +279,9 @@ describe('DocumentService', () => {
 
       expect([...garage.repositories.documentRepository.documents.keys()]).toEqual([kept.id]);
       expect(storedFiles().map((f) => f.id)).toEqual(keptWithFile.files.map((f) => f.id));
+      expect([...garage.repositories.fileStorage.files.keys()]).toEqual(
+        storedFiles().map((f) => f.storageKey),
+      );
       expect([...notifications.notifications.values()].map((n) => n.refId)).toEqual([kept.id]);
     });
 
@@ -324,8 +328,10 @@ describe('DocumentService', () => {
       });
 
       const [stored] = storedFiles();
-      expect(Buffer.from(stored!.data).includes(PDF_BYTES)).toBe(false);
-      expect(stored!.data.byteLength).toBe(12 + 16 + PDF_BYTES.length);
+      const blob = garage.repositories.fileStorage.files.get(stored!.storageKey)!.bytes;
+      expect(blob.includes(PDF_BYTES)).toBe(false);
+      expect(blob.byteLength).toBe(12 + 16 + PDF_BYTES.length);
+      expect(stored!.storageKey).toMatch(/^vehicle-documents\/[a-f\d]{24}\/[a-f\d]{32}\.bin$/);
       expect(await service.getFile(ALICE, vehicleId, documentId, document.files[0]!.id)).toEqual({
         fileName: 'a.pdf',
         contentType: 'application/pdf',
@@ -381,6 +387,7 @@ describe('DocumentService', () => {
 
       expect(updated).toMatchObject({ id: documentId, files: [] });
       expect(storedFiles()).toEqual([]);
+      expect(garage.repositories.fileStorage.files.size).toBe(0);
     });
 
     it.each([

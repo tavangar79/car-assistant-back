@@ -1,8 +1,9 @@
 import type { Prisma } from '@prisma/client';
 
-// The admin collection browser shows only the fields listed here. Never list a Bytes field (files show
-// as `sizeBytes` + `contentType`), a hash, a secret or ciphertext. collection-browser.test.ts fails when
-// a Prisma model is neither registered nor excluded, so a new model can't leak by default.
+// The admin collection browser shows only the fields listed here. Never list a hash, a secret, ciphertext
+// or a file's `storageKey` (files show as `sizeBytes` + `contentType`; their bytes live in FileStorage).
+// collection-browser.test.ts fails when a Prisma model is neither registered nor excluded, so a new
+// model can't leak by default.
 
 export interface CollectionEntry {
   /** The `@@map` name. */
@@ -10,8 +11,6 @@ export interface CollectionEntry {
   model: Prisma.ModelName;
   /** Display order; every document has exactly these keys. */
   fields: readonly string[];
-  /** Set when `sizeBytes` is not stored and is measured from this Bytes field. */
-  measuredBytes?: string;
 }
 
 /** Never shown: password hash and TOTP secret, OTP code hashes, OTP request logs. */
@@ -58,7 +57,6 @@ export const COLLECTIONS = [
     name: 'vehicle_photos',
     model: 'VehiclePhoto',
     fields: ['id', 'vehicleId', 'contentType', 'sizeBytes', 'updatedAt'],
-    measuredBytes: 'data',
   },
   {
     name: 'odometer_readings',
@@ -226,7 +224,6 @@ export const COLLECTIONS = [
     name: 'user_avatars',
     model: 'UserAvatar',
     fields: ['id', 'userId', 'contentType', 'sizeBytes', 'updatedAt'],
-    measuredBytes: 'data',
   },
 ] as const satisfies readonly CollectionEntry[];
 

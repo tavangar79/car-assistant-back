@@ -19,6 +19,7 @@ import { InMemoryDocumentFileRepository } from './in-memory-document-file.reposi
 import { InMemoryDocumentRepository } from './in-memory-document.repository.ts';
 import { InMemoryExpenseAttachmentRepository } from './in-memory-expense-attachment.repository.ts';
 import { InMemoryExpenseRepository } from './in-memory-expense.repository.ts';
+import { InMemoryFileStorage } from './in-memory-file-storage.ts';
 import { InMemoryIntervalDefRepository } from './in-memory-interval-def.repository.ts';
 import { InMemoryFuelLogRepository } from './in-memory-fuel-log.repository.ts';
 import { InMemoryNotificationRepository } from './in-memory-notification.repository.ts';
@@ -57,6 +58,7 @@ export const seededIntervalDefs = () => new InMemoryIntervalDefRepository(global
 export function createTestDependencies(overrides: Partial<AppDependencies> = {}): AppDependencies {
   const vehicleRepository = overrides.vehicleRepository ?? new InMemoryVehicleRepository();
   return {
+    fileStorage: new InMemoryFileStorage(),
     vehicleRepository,
     vehiclePhotoRepository: new InMemoryVehiclePhotoRepository(),
     vehiclePhotoMaxBytes: VEHICLE_PHOTO_MAX_BYTES,

@@ -37,7 +37,7 @@ describe('/api/admin/collections', () => {
           id: 'd00000000000000000000001',
           userId: USER,
           contentType: 'image/png',
-          data: new Uint8Array([1, 2]),
+          storageKey: `avatars/${USER}/abc.png`,
           sizeBytes: 2,
           updatedAt: AT,
         },

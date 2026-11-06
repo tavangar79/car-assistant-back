@@ -143,13 +143,22 @@ export interface PublicUser {
   avatarUrl: string | null;
 }
 
+/** The avatar with its bytes, ready to send. */
 export interface UserAvatar {
   contentType: string;
   data: Uint8Array;
   updatedAt: Date;
 }
 
-export type NewUserAvatar = Omit<UserAvatar, 'updatedAt'>;
+/** The avatar row: its bytes live in FileStorage under `storageKey`. */
+export interface StoredUserAvatar {
+  contentType: string;
+  storageKey: string;
+  sizeBytes: number;
+  updatedAt: Date;
+}
+
+export type NewUserAvatar = Omit<StoredUserAvatar, 'updatedAt'>;
 
 export interface RequestOtpResult {
   expiresInSeconds: number;

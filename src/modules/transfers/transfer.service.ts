@@ -1,3 +1,4 @@
+import { deleteFilesQuietly, type FileStorage } from '../../lib/file-storage.ts';
 import { AppError, ConflictError, NotFoundError } from '../../shared/errors.ts';
 import type { User } from '../auth/auth.types.ts';
 import type { UserRepository } from '../auth/user.repository.ts';
@@ -20,6 +21,8 @@ export interface TransferServiceDeps {
   users: UserRepository;
   documents: DocumentRepository;
   documentFiles: DocumentFileRepository;
+  /** Holds the document file blobs deleted with the seller's identity documents. */
+  files: FileStorage;
   notifications: NotificationRepository;
   now: () => Date;
 }
@@ -139,12 +142,13 @@ export class TransferService {
 
   /** Files first, so a retry still finds the documents whose files are left. */
   private async deleteIdentityDocuments(vehicleId: string): Promise<void> {
-    const { documents, documentFiles } = this.deps;
+    const { documents, documentFiles, files } = this.deps;
     const ids = (await documents.listByVehicles([vehicleId]))
       .filter((document) => IDENTITY_DOCUMENT_TYPES.includes(document.type as DocumentType))
       .map((document) => document.id);
-    await documentFiles.deleteByDocumentIds(ids);
+    const keys = await documentFiles.deleteByDocumentIds(ids);
     for (const id of ids) await documents.delete(id);
+    await deleteFilesQuietly(files, keys);
   }
 
   /** 404 for a malformed or unknown id, or a transfer that is no longer pending. */

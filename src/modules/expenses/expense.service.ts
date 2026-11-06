@@ -1,3 +1,9 @@
+import {
+  deleteFilesQuietly,
+  newStorageKey,
+  putThenSave,
+  type FileStorage,
+} from '../../lib/file-storage.ts';
 import { NotFoundError, ValidationError } from '../../shared/errors.ts';
 import { detectFileType, type FileContentType } from '../../shared/file-type.ts';
 import type { NotificationRepository } from '../notifications/notification.repository.ts';
@@ -19,6 +25,8 @@ import type {
 export interface ExpenseServiceDeps {
   expenses: ExpenseRepository;
   attachments: ExpenseAttachmentRepository;
+  /** Holds the attachment bytes; the row keeps only the key. */
+  files: FileStorage;
   /** A deleted expense's notifications go too. */
   notifications: NotificationRepository;
   /** Ownership checks come from here. Expenses never touch the vehicle's mileage. */
@@ -136,9 +144,10 @@ export class ExpenseService {
   /** Deletes the attachment and notifications too. */
   async remove(userId: string, vehicleId: string, expenseId: string): Promise<void> {
     const { expense } = await this.findWritable(userId, vehicleId, expenseId);
-    await this.deps.attachments.deleteByExpenseIds([expense.id]);
+    const keys = await this.deps.attachments.deleteByExpenseIds([expense.id]);
     await this.deps.notifications.deleteByRefIds([expense.id]);
     await this.deps.expenses.delete(expense.id);
+    await deleteFilesQuietly(this.deps.files, keys);
   }
 
   /** Stores (or replaces) the attachment. The type comes from the magic bytes, not the client. */
@@ -151,7 +160,14 @@ export class ExpenseService {
     const { vehicle, expense } = await this.findWritable(userId, vehicleId, expenseId);
     const contentType = detectFileType(data, EXPENSE_ATTACHMENT_CONTENT_TYPES);
     if (!contentType) throw new ValidationError({ attachment: [EXPENSE_ATTACHMENT_BAD_TYPE] });
-    const meta = await this.deps.attachments.save(expense.id, { fileName, contentType, data });
+    const { attachments, files } = this.deps;
+    const previous = await attachments.findByExpenseId(expense.id);
+    const storageKey = newStorageKey(`expense-attachments/${expense.id}`, contentType);
+    const sizeBytes = data.byteLength;
+    const meta = await putThenSave(files, { key: storageKey, bytes: data, contentType }, () =>
+      attachments.save(expense.id, { fileName, contentType, storageKey, sizeBytes }),
+    );
+    await deleteFilesQuietly(files, [previous?.storageKey]);
     return toExpense(expense, meta, vehicle.ownedSince);
   }
 
@@ -162,14 +178,17 @@ export class ExpenseService {
   ): Promise<ExpenseAttachment> {
     const { expense } = await this.findOwned(userId, vehicleId, expenseId);
     const attachment = await this.deps.attachments.findByExpenseId(expense.id);
-    if (!attachment) throw new NotFoundError('Attachment');
-    return attachment;
+    const data = attachment && (await this.deps.files.get(attachment.storageKey));
+    if (!attachment || !data) throw new NotFoundError('Attachment');
+    const { fileName, contentType, sizeBytes, updatedAt } = attachment;
+    return { fileName, contentType, sizeBytes, updatedAt, data };
   }
 
   /** Idempotent: deleting a missing attachment still succeeds. */
   async deleteAttachment(userId: string, vehicleId: string, expenseId: string): Promise<Expense> {
     const { vehicle, expense } = await this.findWritable(userId, vehicleId, expenseId);
-    await this.deps.attachments.deleteByExpenseIds([expense.id]);
+    const keys = await this.deps.attachments.deleteByExpenseIds([expense.id]);
+    await deleteFilesQuietly(this.deps.files, keys);
     return toExpense(expense, null, vehicle.ownedSince);
   }
 

@@ -1,18 +1,18 @@
 import type { PrismaClient } from '@prisma/client';
 import type {
   NewServiceInvoice,
-  ServiceInvoice,
   ServiceInvoiceMeta,
+  StoredServiceInvoice,
 } from './service-visit.types.ts';
 
 export interface ServiceInvoiceRepository {
-  findByServiceId(serviceId: string): Promise<ServiceInvoice | null>;
-  /** Invoice facts without bytes, keyed by service id. Visits without an invoice are absent. */
+  findByServiceId(serviceId: string): Promise<StoredServiceInvoice | null>;
+  /** Invoice facts, keyed by service id. Visits without an invoice are absent. */
   findMetas(serviceIds: string[]): Promise<Map<string, ServiceInvoiceMeta>>;
-  /** Creates or replaces the visit's invoice. */
+  /** Creates or replaces the visit's invoice row. */
   save(serviceId: string, invoice: NewServiceInvoice): Promise<ServiceInvoiceMeta>;
-  /** No-op for visits without an invoice. */
-  deleteByServiceIds(serviceIds: string[]): Promise<void>;
+  /** The storage keys of the removed rows; visits without an invoice add none. */
+  deleteByServiceIds(serviceIds: string[]): Promise<string[]>;
 }
 
 const META_FIELDS = {
@@ -25,10 +25,10 @@ const META_FIELDS = {
 export class PrismaServiceInvoiceRepository implements ServiceInvoiceRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  findByServiceId(serviceId: string): Promise<ServiceInvoice | null> {
+  findByServiceId(serviceId: string): Promise<StoredServiceInvoice | null> {
     return this.prisma.serviceInvoice.findUnique({
       where: { serviceId },
-      select: { ...META_FIELDS, data: true },
+      select: { ...META_FIELDS, storageKey: true },
     });
   }
 
@@ -40,17 +40,7 @@ export class PrismaServiceInvoiceRepository implements ServiceInvoiceRepository 
     return new Map(invoices.map(({ serviceId, ...meta }) => [serviceId, meta]));
   }
 
-  save(
-    serviceId: string,
-    { fileName, contentType, data }: NewServiceInvoice,
-  ): Promise<ServiceInvoiceMeta> {
-    // Prisma wants bytes backed by a plain ArrayBuffer; a Node Buffer may sit on a shared pool.
-    const invoice = {
-      fileName,
-      contentType,
-      sizeBytes: data.byteLength,
-      data: new Uint8Array(data),
-    };
+  save(serviceId: string, invoice: NewServiceInvoice): Promise<ServiceInvoiceMeta> {
     return this.prisma.serviceInvoice.upsert({
       where: { serviceId },
       create: { serviceId, ...invoice },
@@ -59,8 +49,11 @@ export class PrismaServiceInvoiceRepository implements ServiceInvoiceRepository 
     });
   }
 
-  async deleteByServiceIds(serviceIds: string[]): Promise<void> {
-    if (serviceIds.length === 0) return;
-    await this.prisma.serviceInvoice.deleteMany({ where: { serviceId: { in: serviceIds } } });
+  async deleteByServiceIds(serviceIds: string[]): Promise<string[]> {
+    if (serviceIds.length === 0) return [];
+    const where = { serviceId: { in: serviceIds } };
+    const rows = await this.prisma.serviceInvoice.findMany({ where, select: { storageKey: true } });
+    await this.prisma.serviceInvoice.deleteMany({ where });
+    return rows.map((row) => row.storageKey);
   }
 }

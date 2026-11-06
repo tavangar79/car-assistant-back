@@ -48,6 +48,7 @@ describe('TransferService', () => {
       users,
       documents: r.documentRepository,
       documentFiles: r.documentFileRepository,
+      files: r.fileStorage,
       notifications: r.notificationRepository,
       now: () => NOW,
     });
@@ -245,11 +246,25 @@ describe('TransferService', () => {
       const insurance = await garage.addDocument(car, { type: 'third_party_insurance' });
       const inspection = await garage.addDocument(car, { type: 'inspection' });
       const file = { fileName: 'a.pdf', contentType: 'application/pdf', sizeBytes: 1 };
-      await documentFileRepository.create({ ...file, documentId: card, data: new Uint8Array(1) });
+      await garage.repositories.fileStorage.put(
+        'vehicle-documents/card/a.bin',
+        Buffer.alloc(1),
+        'x',
+      );
+      await garage.repositories.fileStorage.put(
+        'vehicle-documents/ins/a.bin',
+        Buffer.alloc(1),
+        'x',
+      );
+      await documentFileRepository.create({
+        ...file,
+        documentId: card,
+        storageKey: 'vehicle-documents/card/a.bin',
+      });
       const kept = await documentFileRepository.create({
         ...file,
         documentId: insurance,
-        data: new Uint8Array(1),
+        storageKey: 'vehicle-documents/ins/a.bin',
       });
       const transfer = await service.create(seller.id, car, BUYER_PHONE);
 
@@ -259,6 +274,9 @@ describe('TransferService', () => {
         [insurance, inspection].sort(),
       );
       expect([...documentFileRepository.files.keys()]).toEqual([kept.id]);
+      expect([...garage.repositories.fileStorage.files.keys()]).toEqual([
+        'vehicle-documents/ins/a.bin',
+      ]);
       expect([card, green, poa].some((id) => documentRepository.documents.has(id))).toBe(false);
     });
 

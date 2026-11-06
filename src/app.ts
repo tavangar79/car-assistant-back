@@ -1,4 +1,5 @@
 import express, { type Express } from 'express';
+import type { FileStorage } from './lib/file-storage.ts';
 import { cors, type CorsSettings } from './shared/cors.ts';
 import { errorHandler, notFoundHandler } from './shared/error-handler.ts';
 import { ipRateLimit, type IpRateLimitSettings } from './shared/ip-rate-limit.ts';
@@ -72,6 +73,8 @@ import { VehicleService } from './modules/vehicles/vehicle.service.ts';
 
 // Everything the app needs from the outside world. Tests pass in-memory fakes.
 export interface AppDependencies {
+  /** Uploaded file bytes (avatars, photos, invoices, attachments, encrypted documents). Never MongoDB. */
+  fileStorage: FileStorage;
   vehicleRepository: VehicleRepository;
   vehiclePhotoRepository: VehiclePhotoRepository;
   /** Largest accepted vehicle photo upload, in bytes. */
@@ -137,6 +140,7 @@ export function createApp(deps: AppDependencies): Express {
   const authService = new AuthService({
     users: deps.userRepository,
     avatars: deps.avatarRepository,
+    files: deps.fileStorage,
     otps: deps.otpRepository,
     sms: deps.smsSender,
     tokens: deps.tokenService,
@@ -174,6 +178,7 @@ export function createApp(deps: AppDependencies): Express {
     documents: deps.documentRepository,
     documentFiles: deps.documentFileRepository,
     notifications: deps.notificationRepository,
+    files: deps.fileStorage,
     catalog: vehicleCatalog,
     now: deps.now,
   });
@@ -225,6 +230,7 @@ export function createApp(deps: AppDependencies): Express {
   const serviceVisitService = new ServiceVisitService({
     visits: deps.serviceVisitRepository,
     invoices: deps.serviceInvoiceRepository,
+    files: deps.fileStorage,
     vehicles: vehicleService,
     odometer: odometerService,
     items: serviceItems,
@@ -247,6 +253,7 @@ export function createApp(deps: AppDependencies): Express {
   const expenseService = new ExpenseService({
     expenses: deps.expenseRepository,
     attachments: deps.expenseAttachmentRepository,
+    files: deps.fileStorage,
     notifications: deps.notificationRepository,
     vehicles: vehicleService,
     now: deps.now,
@@ -254,6 +261,7 @@ export function createApp(deps: AppDependencies): Express {
   const documentService = new DocumentService({
     documents: deps.documentRepository,
     files: deps.documentFileRepository,
+    storage: deps.fileStorage,
     notifications: deps.notificationRepository,
     vehicles: vehicleService,
     encryptionKey: deps.documentEncryptionKey,
@@ -292,6 +300,7 @@ export function createApp(deps: AppDependencies): Express {
     users: deps.userRepository,
     documents: deps.documentRepository,
     documentFiles: deps.documentFileRepository,
+    files: deps.fileStorage,
     notifications: deps.notificationRepository,
     now: deps.now,
   });

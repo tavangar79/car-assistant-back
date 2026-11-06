@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { COLLECTIONS, EXCLUDED_MODELS, findCollection, toDocument } from './collection-browser.ts';
 
 const models = Prisma.dmmf.datamodel.models;
-const SENSITIVE = /hash|secret|totp|password|cipher/i;
+const SENSITIVE = /hash|secret|totp|password|cipher|storageKey/i;
 
 describe('collection registry', () => {
   it('classifies every Prisma model as either registered or excluded', () => {
@@ -28,27 +28,39 @@ describe('collection registry', () => {
     (_name, entry) => {
       const model = models.find((m) => m.name === entry.model)!;
       const fieldType = new Map(model.fields.map((field) => [field.name, field.type]));
-      const measured = 'measuredBytes' in entry ? entry.measuredBytes : undefined;
 
       expect(model.dbName).toBe(entry.name);
       expect(entry.fields[0]).toBe('id');
       for (const field of entry.fields) {
         expect(field).not.toMatch(SENSITIVE);
-        if (field === 'sizeBytes' && measured) continue;
         expect(fieldType.has(field), `${entry.name}.${field} exists`).toBe(true);
         expect(fieldType.get(field), `${entry.name}.${field} is not Bytes`).not.toBe('Bytes');
       }
-      if (measured) expect(fieldType.get(measured)).toBe('Bytes');
     },
   );
 
-  it('shows every model that stores bytes as sizeBytes', () => {
-    for (const entry of COLLECTIONS) {
-      const model = models.find((m) => m.name === entry.model)!;
-      if (model.fields.some((field) => field.type === 'Bytes')) {
-        expect(entry.fields, entry.name).toContain('sizeBytes');
-        expect(entry.fields, entry.name).toContain('contentType');
-      }
+  it('has no Prisma model that stores file bytes (they live in FileStorage)', () => {
+    const bytesFields = models.flatMap((model) =>
+      model.fields.filter((field) => field.type === 'Bytes').map((f) => `${model.name}.${f.name}`),
+    );
+
+    expect(bytesFields).toEqual([]);
+  });
+
+  it('shows every file model as sizeBytes + contentType, never its storageKey', () => {
+    const fileModels = models.filter((m) => m.fields.some((field) => field.name === 'storageKey'));
+    expect(fileModels.map((m) => m.name).sort()).toEqual([
+      'ExpenseAttachment',
+      'ServiceInvoice',
+      'UserAvatar',
+      'VehicleDocumentFile',
+      'VehiclePhoto',
+    ]);
+    for (const model of fileModels) {
+      const entry = COLLECTIONS.find((e) => e.model === model.name)!;
+      expect(entry.fields, entry.name).toContain('sizeBytes');
+      expect(entry.fields, entry.name).toContain('contentType');
+      expect(entry.fields, entry.name).not.toContain('storageKey');
     }
   });
 
@@ -65,7 +77,7 @@ describe('toDocument', () => {
     const document = toDocument(entry, {
       updatedAt: new Date('2026-01-01T00:00:00Z'),
       id: 'p1',
-      data: new Uint8Array([1, 2, 3]),
+      storageKey: 'vehicle-photos/v1/abc.png',
       sizeBytes: 3,
       contentType: 'image/png',
     });

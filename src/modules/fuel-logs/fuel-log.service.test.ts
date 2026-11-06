@@ -11,6 +11,7 @@ import { InMemoryServiceIntervalRepository } from '../../test/in-memory-service-
 import { InMemoryServiceInvoiceRepository } from '../../test/in-memory-service-invoice.repository.ts';
 import { InMemoryServiceVisitRepository } from '../../test/in-memory-service-visit.repository.ts';
 import { InMemoryVehiclePhotoRepository } from '../../test/in-memory-vehicle-photo.repository.ts';
+import { InMemoryFileStorage } from '../../test/in-memory-file-storage.ts';
 import { InMemoryVehicleRepository } from '../../test/in-memory-vehicle.repository.ts';
 import { VEHICLE_CATALOG } from '../vehicle-catalog/vehicle-catalog.data.ts';
 import { VehicleCatalog } from '../vehicle-catalog/vehicle-catalog.ts';
@@ -75,6 +76,7 @@ describe('FuelLogService', () => {
       documents: new InMemoryDocumentRepository(),
       documentFiles: new InMemoryDocumentFileRepository(),
       notifications: new InMemoryNotificationRepository(),
+      files: new InMemoryFileStorage(),
       catalog: new VehicleCatalog(VEHICLE_CATALOG),
       now: () => NOW,
     });

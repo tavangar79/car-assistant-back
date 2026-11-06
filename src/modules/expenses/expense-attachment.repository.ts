@@ -1,18 +1,18 @@
 import type { PrismaClient } from '@prisma/client';
 import type {
-  ExpenseAttachment,
   ExpenseAttachmentMeta,
   NewExpenseAttachment,
+  StoredExpenseAttachment,
 } from './expense.types.ts';
 
 export interface ExpenseAttachmentRepository {
-  findByExpenseId(expenseId: string): Promise<ExpenseAttachment | null>;
-  /** Attachment facts without bytes, keyed by expense id. Expenses without a file are absent. */
+  findByExpenseId(expenseId: string): Promise<StoredExpenseAttachment | null>;
+  /** Attachment facts, keyed by expense id. Expenses without a file are absent. */
   findMetas(expenseIds: string[]): Promise<Map<string, ExpenseAttachmentMeta>>;
-  /** Creates or replaces the expense's attachment. */
+  /** Creates or replaces the expense's attachment row. */
   save(expenseId: string, attachment: NewExpenseAttachment): Promise<ExpenseAttachmentMeta>;
-  /** No-op for expenses without an attachment. */
-  deleteByExpenseIds(expenseIds: string[]): Promise<void>;
+  /** The storage keys of the removed rows; expenses without an attachment add none. */
+  deleteByExpenseIds(expenseIds: string[]): Promise<string[]>;
 }
 
 const META_FIELDS = {
@@ -25,10 +25,10 @@ const META_FIELDS = {
 export class PrismaExpenseAttachmentRepository implements ExpenseAttachmentRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  findByExpenseId(expenseId: string): Promise<ExpenseAttachment | null> {
+  findByExpenseId(expenseId: string): Promise<StoredExpenseAttachment | null> {
     return this.prisma.expenseAttachment.findUnique({
       where: { expenseId },
-      select: { ...META_FIELDS, data: true },
+      select: { ...META_FIELDS, storageKey: true },
     });
   }
 
@@ -40,17 +40,7 @@ export class PrismaExpenseAttachmentRepository implements ExpenseAttachmentRepos
     return new Map(attachments.map(({ expenseId, ...meta }) => [expenseId, meta]));
   }
 
-  save(
-    expenseId: string,
-    { fileName, contentType, data }: NewExpenseAttachment,
-  ): Promise<ExpenseAttachmentMeta> {
-    // Prisma wants bytes backed by a plain ArrayBuffer; a Node Buffer may sit on a shared pool.
-    const attachment = {
-      fileName,
-      contentType,
-      sizeBytes: data.byteLength,
-      data: new Uint8Array(data),
-    };
+  save(expenseId: string, attachment: NewExpenseAttachment): Promise<ExpenseAttachmentMeta> {
     return this.prisma.expenseAttachment.upsert({
       where: { expenseId },
       create: { expenseId, ...attachment },
@@ -59,8 +49,14 @@ export class PrismaExpenseAttachmentRepository implements ExpenseAttachmentRepos
     });
   }
 
-  async deleteByExpenseIds(expenseIds: string[]): Promise<void> {
-    if (expenseIds.length === 0) return;
-    await this.prisma.expenseAttachment.deleteMany({ where: { expenseId: { in: expenseIds } } });
+  async deleteByExpenseIds(expenseIds: string[]): Promise<string[]> {
+    if (expenseIds.length === 0) return [];
+    const where = { expenseId: { in: expenseIds } };
+    const rows = await this.prisma.expenseAttachment.findMany({
+      where,
+      select: { storageKey: true },
+    });
+    await this.prisma.expenseAttachment.deleteMany({ where });
+    return rows.map((row) => row.storageKey);
   }
 }

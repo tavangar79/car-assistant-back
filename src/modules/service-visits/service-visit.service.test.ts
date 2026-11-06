@@ -12,6 +12,7 @@ import { InMemoryServiceIntervalRepository } from '../../test/in-memory-service-
 import { InMemoryServiceInvoiceRepository } from '../../test/in-memory-service-invoice.repository.ts';
 import { InMemoryServiceVisitRepository } from '../../test/in-memory-service-visit.repository.ts';
 import { InMemoryVehiclePhotoRepository } from '../../test/in-memory-vehicle-photo.repository.ts';
+import { InMemoryFileStorage } from '../../test/in-memory-file-storage.ts';
 import { InMemoryVehicleRepository } from '../../test/in-memory-vehicle.repository.ts';
 import type { InMemoryServiceItemDefRepository } from '../../test/in-memory-service-item-def.repository.ts';
 import { seededServiceItemDefs } from '../../test/test-dependencies.ts';
@@ -71,6 +72,7 @@ describe('ServiceVisitService', () => {
   let readings: InMemoryOdometerReadingRepository;
   let visits: InMemoryServiceVisitRepository;
   let invoices: InMemoryServiceInvoiceRepository;
+  let files: InMemoryFileStorage;
   let vehicleService: VehicleService;
   let itemDefs: InMemoryServiceItemDefRepository;
   let service: ServiceVisitService;
@@ -81,6 +83,7 @@ describe('ServiceVisitService', () => {
     readings = new InMemoryOdometerReadingRepository(vehicles);
     visits = new InMemoryServiceVisitRepository();
     invoices = new InMemoryServiceInvoiceRepository();
+    files = new InMemoryFileStorage();
     itemDefs = seededServiceItemDefs();
     vehicleService = new VehicleService({
       vehicles,
@@ -95,10 +98,12 @@ describe('ServiceVisitService', () => {
       documents: new InMemoryDocumentRepository(),
       documentFiles: new InMemoryDocumentFileRepository(),
       notifications: new InMemoryNotificationRepository(),
+      files,
       catalog: new VehicleCatalog(VEHICLE_CATALOG),
       now: () => NOW,
     });
     service = new ServiceVisitService({
+      files,
       visits,
       invoices,
       vehicles: vehicleService,
@@ -416,6 +421,7 @@ describe('ServiceVisitService', () => {
 
       expect(visits.visits.size).toBe(0);
       expect(invoices.invoices.size).toBe(0);
+      expect(files.files.size).toBe(0);
       expect(await mileage()).toBe(40000);
     });
 
@@ -548,6 +554,21 @@ describe('ServiceVisitService', () => {
 
       expect(second.invoiceUrl).not.toBe(first.invoiceUrl);
       expect(invoices.invoices.size).toBe(1);
+      expect([...files.files.keys()]).toEqual([invoices.invoices.get(serviceId)!.storageKey]);
+    });
+
+    it('stores the bytes in file storage and getInvoice reads them back', async () => {
+      await service.uploadInvoice(ALICE, vehicleId, serviceId, { fileName: 'a', data: PNG_BYTES });
+
+      const { storageKey } = invoices.invoices.get(serviceId)!;
+      expect(storageKey).toMatch(new RegExp(`^service-invoices/${serviceId}/[a-f\\d]{32}\\.png$`));
+      expect(await service.getInvoice(ALICE, vehicleId, serviceId)).toEqual({
+        fileName: 'a',
+        contentType: 'image/png',
+        sizeBytes: PNG_BYTES.byteLength,
+        updatedAt: expect.any(Date),
+        data: PNG_BYTES,
+      });
     });
 
     it('getInvoice returns 404 without an invoice', async () => {
@@ -565,6 +586,7 @@ describe('ServiceVisitService', () => {
       expect(visit).toMatchObject({ id: serviceId, invoice: null, invoiceUrl: null });
       expect(again.invoice).toBeNull();
       expect(invoices.invoices.size).toBe(0);
+      expect(files.files.size).toBe(0);
     });
 
     it("returns 404 for another user's vehicle", async () => {

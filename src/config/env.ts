@@ -82,6 +82,10 @@ const envSchema = z
       .transform((value) => Buffer.from(value, 'base64'))
       .refine((key) => key.byteLength === ENCRYPTION_KEY_BYTES, ENCRYPTION_KEY_MESSAGE),
 
+    // Folder for uploaded files (avatars, photos, invoices, attachments, encrypted documents).
+    // Relative paths resolve against the working directory.
+    UPLOAD_DIR: z.string().trim().min(1).default('./uploads'),
+
     SMS_PROVIDER: z.enum(['console', 'kavenegar']).default('console'),
     KAVENEGAR_API_KEY: z.string().default(''),
     KAVENEGAR_OTP_TEMPLATE: z.string().default(''),
