@@ -97,14 +97,26 @@ export interface User {
   lastName: string | null;
   /** UTC midnight of the Gregorian birth date. */
   birthDate: Date | null;
-  /** `user` or `admin` (see `USER_ROLES`). Not part of the public profile. */
-  role: string;
+  /** Set by an admin; null = active. */
+  blockedAt: Date | null;
+  blockReason: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export const USER_ROLES = ['user', 'admin'] as const;
-export type UserRole = (typeof USER_ROLES)[number];
+/** An admin's block (both null = unblocked). */
+export interface UserBlock {
+  blockedAt: Date | null;
+  blockReason: string | null;
+}
+
+/** Admin user list: `search` matches part of the phone or the first/last name (case-insensitive). */
+export interface UserListQuery {
+  search?: string;
+  /** Only users with an id below this one (ids sort newest first). */
+  cursor?: string;
+  limit: number;
+}
 
 export interface OtpCode {
   phone: string;

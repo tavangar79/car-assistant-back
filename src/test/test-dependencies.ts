@@ -12,7 +12,9 @@ import { REPORT_MAX_ENTRIES } from '../modules/reports/report.service.ts';
 import { SERVICE_INVOICE_MAX_BYTES } from '../modules/service-visits/service-visit.routes.ts';
 import { VEHICLE_PHOTO_MAX_BYTES } from '../modules/vehicles/vehicle.routes.ts';
 import { FakeSmsSender } from './fake-sms-sender.ts';
+import { InMemoryAdminRepository } from './in-memory-admin.repository.ts';
 import { InMemoryAvatarRepository } from './in-memory-avatar.repository.ts';
+import { InMemoryCollectionRepository } from './in-memory-collection.repository.ts';
 import { InMemoryDocumentFileRepository } from './in-memory-document-file.repository.ts';
 import { InMemoryDocumentRepository } from './in-memory-document.repository.ts';
 import { InMemoryExpenseAttachmentRepository } from './in-memory-expense-attachment.repository.ts';
@@ -32,6 +34,15 @@ import { InMemoryVehiclePhotoRepository } from './in-memory-vehicle-photo.reposi
 import { InMemoryVehicleRepository } from './in-memory-vehicle.repository.ts';
 
 export const TEST_JWT_SECRET = 'test-secret-test-secret-test-secret';
+export const TEST_ADMIN_JWT_SECRET = 'test-admin-secret-test-admin-secret';
+/** Users that exist in the default test user repository, so their tokens pass `requireAuth`. */
+export const ALICE_ID = 'aaaaaaaaaaaaaaaaaaaaaaaa';
+export const BOB_ID = 'bbbbbbbbbbbbbbbbbbbbbbbb';
+export const testUsers = () =>
+  new InMemoryUserRepository([
+    { id: ALICE_ID, phone: '09120000001' },
+    { id: BOB_ID, phone: '09120000002' },
+  ]);
 /** A fixed 32-byte key, so tests never need the real DOCUMENT_ENCRYPTION_KEY. */
 export const TEST_ENCRYPTION_KEY = Buffer.alloc(32, 0x42);
 
@@ -67,7 +78,7 @@ export function createTestDependencies(overrides: Partial<AppDependencies> = {})
     notificationRepository: new InMemoryNotificationRepository(),
     transferRepository: new InMemoryTransferRepository(),
     reportMaxEntries: REPORT_MAX_ENTRIES,
-    userRepository: new InMemoryUserRepository(),
+    userRepository: testUsers(),
     avatarRepository: new InMemoryAvatarRepository(),
     avatarMaxBytes: AVATAR_MAX_BYTES,
     otpRepository: new InMemoryOtpRepository(),
@@ -87,6 +98,12 @@ export function createTestDependencies(overrides: Partial<AppDependencies> = {})
     },
     authIpRateLimit: { max: 1000, windowSeconds: 900 },
     cors: { origins: [], allowLocalhost: true },
+    checkDatabase: async () => {},
+    adminRepository: new InMemoryAdminRepository(),
+    adminTokenService: new TokenService(TEST_ADMIN_JWT_SECRET, '10d', 'admin'),
+    adminLoginRateLimit: { max: 1000, windowSeconds: 900 },
+    collectionRepository: new InMemoryCollectionRepository(),
+    adminLog: () => {},
     ...overrides,
   };
 }

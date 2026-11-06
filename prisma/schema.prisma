@@ -33,6 +33,7 @@ model Vehicle {
   updatedAt  DateTime      @updatedAt
 
   @@index([userId])
+  @@index([createdAt])
   @@map("vehicles")
 }
 
@@ -92,6 +93,7 @@ model OdometerReading {
   createdAt  DateTime @default(now())
 
   @@index([vehicleId])
+  @@index([createdAt])
   @@map("odometer_readings")
 }
 
@@ -110,6 +112,7 @@ model ServiceVisit {
   updatedAt   DateTime          @updatedAt
 
   @@index([vehicleId, serviceDate])
+  @@index([createdAt])
   @@map("service_visits")
 }
 
@@ -161,6 +164,7 @@ model FuelLog {
   updatedAt     DateTime @updatedAt
 
   @@index([vehicleId, fueledAt])
+  @@index([createdAt])
   @@map("fuel_logs")
 }
 
@@ -185,6 +189,7 @@ model Expense {
   updatedAt       DateTime  @updatedAt
 
   @@index([vehicleId, paidAt])
+  @@index([createdAt])
   @@map("expenses")
 }
 
@@ -220,6 +225,7 @@ model VehicleDocument {
   updatedAt      DateTime  @updatedAt
 
   @@index([vehicleId])
+  @@index([createdAt])
   @@map("vehicle_documents")
 }
 
@@ -330,17 +336,21 @@ model IntervalDef {
 }
 
 model User {
-  id        String    @id @default(auto()) @map("_id") @db.ObjectId
-  phone     String    @unique
-  firstName String?
-  lastName  String?
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  phone       String    @unique
+  firstName   String?
+  lastName    String?
   /// UTC midnight of the Gregorian birth date.
-  birthDate DateTime?
-  /// user | admin. Granted with `npm run admin:grant -- <phone>`.
-  role      String    @default("user")
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  birthDate   DateTime?
+  /// Unused since Phase 8 (admins are the separate `admins` collection); kept for one release.
+  role        String    @default("user")
+  /// Set by an admin; null = active. A blocked user gets 403 on login and on every authenticated route.
+  blockedAt   DateTime?
+  blockReason String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
+  @@index([createdAt])
   @@map("users")
 }
 
@@ -380,4 +390,20 @@ model UserAvatar {
   updatedAt   DateTime @updatedAt
 
   @@map("user_avatars")
+}
+
+// The admin panel account (username + password + TOTP). `npm run admin:setup` replaces every row with one.
+model Admin {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  username     String   @unique
+  /// scrypt$N$r$p$salt$hash (see modules/admin/password.ts).
+  passwordHash String
+  /// Base32 TOTP secret (RFC 6238).
+  totpSecret   String
+  /// The last accepted TOTP step; a code for this step or an earlier one is rejected (replay protection).
+  lastTotpStep Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("admins")
 }

@@ -1,6 +1,9 @@
 import { createApp } from './app.ts';
 import { loadEnv } from './config/env.ts';
 import { createPrismaClient } from './lib/prisma.ts';
+import { ADMIN_LOGIN_RATE_LIMIT } from './modules/admin/admin-auth.service.ts';
+import { PrismaAdminRepository } from './modules/admin/admin.repository.ts';
+import { PrismaCollectionRepository } from './modules/admin/collection.repository.ts';
 import { PrismaAvatarRepository } from './modules/auth/avatar.repository.ts';
 import { AVATAR_MAX_BYTES } from './modules/auth/avatar-upload.ts';
 import { createCodeGenerator, createOtpHasher } from './modules/auth/otp-code.ts';
@@ -88,11 +91,22 @@ const app = createApp({
     // Flutter web picks a random localhost port in dev; production allows only CORS_ORIGINS.
     allowLocalhost: env.NODE_ENV !== 'production',
   },
+  checkDatabase: async () => {
+    await prisma.$runCommandRaw({ ping: 1 });
+  },
+  adminRepository: new PrismaAdminRepository(prisma),
+  adminTokenService: new TokenService(env.ADMIN_JWT_SECRET, env.ADMIN_JWT_EXPIRES_IN, 'admin'),
+  adminLoginRateLimit: ADMIN_LOGIN_RATE_LIMIT,
+  collectionRepository: new PrismaCollectionRepository(prisma),
+  adminLog: (line) => console.log(`[admin] ${new Date().toISOString()} ${line}`),
 });
 // Behind N reverse proxies, req.ip (used by the per-IP rate limit) must come from X-Forwarded-For.
 app.set('trust proxy', env.TRUST_PROXY_HOPS);
 
-const server = app.listen(env.PORT, () => {
+// Express 5 passes listen errors (e.g. EADDRINUSE, or EACCES on a Windows-reserved port) to this
+// callback instead of throwing; rethrow so the process crashes loudly rather than exiting silently.
+const server = app.listen(env.PORT, (error?: Error) => {
+  if (error) throw error;
   console.log(`API listening on http://localhost:${env.PORT}`);
 });
 

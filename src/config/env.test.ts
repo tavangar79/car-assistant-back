@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { JWT_SECRET_PLACEHOLDER, loadEnv } from './env.ts';
+import { ADMIN_JWT_SECRET_PLACEHOLDER, JWT_SECRET_PLACEHOLDER, loadEnv } from './env.ts';
 
 const KEY = Buffer.alloc(32, 7);
 
 const base = {
   DATABASE_URL: 'mongodb://localhost:27017/test',
   JWT_SECRET: 'a'.repeat(32),
+  ADMIN_JWT_SECRET: 'b'.repeat(32),
   DOCUMENT_ENCRYPTION_KEY: KEY.toString('base64'),
 };
 
@@ -23,6 +24,7 @@ describe('loadEnv', () => {
 
     expect(env).toMatchObject({
       JWT_EXPIRES_IN: '30d',
+      ADMIN_JWT_EXPIRES_IN: '10d',
       SMS_PROVIDER: 'console',
       OTP_LENGTH: 5,
       OTP_RATE_LIMIT_ENABLED: true,
@@ -51,6 +53,40 @@ describe('loadEnv', () => {
 
   it('rejects a JWT_EXPIRES_IN without a unit', () => {
     expect(() => loadEnv({ ...base, JWT_EXPIRES_IN: '3600' })).toThrow(/JWT_EXPIRES_IN/);
+  });
+
+  describe('ADMIN_JWT_SECRET', () => {
+    it('is required', () => {
+      expect(() => loadEnv({ ...base, ADMIN_JWT_SECRET: undefined })).toThrow(
+        /ADMIN_JWT_SECRET is required/,
+      );
+    });
+
+    it('rejects a short secret', () => {
+      expect(() => loadEnv({ ...base, ADMIN_JWT_SECRET: 'short' })).toThrow(/ADMIN_JWT_SECRET/);
+    });
+
+    it.each([ADMIN_JWT_SECRET_PLACEHOLDER, JWT_SECRET_PLACEHOLDER])(
+      'rejects the placeholder %s',
+      (placeholder) => {
+        expect(() => loadEnv({ ...base, ADMIN_JWT_SECRET: placeholder })).toThrow(
+          /ADMIN_JWT_SECRET/,
+        );
+      },
+    );
+
+    it('must differ from JWT_SECRET', () => {
+      expect(() => loadEnv({ ...base, ADMIN_JWT_SECRET: base.JWT_SECRET })).toThrow(
+        /must differ from JWT_SECRET/,
+      );
+    });
+
+    it('reads ADMIN_JWT_EXPIRES_IN and rejects one without a unit', () => {
+      expect(loadEnv({ ...base, ADMIN_JWT_EXPIRES_IN: '12h' }).ADMIN_JWT_EXPIRES_IN).toBe('12h');
+      expect(() => loadEnv({ ...base, ADMIN_JWT_EXPIRES_IN: '3600' })).toThrow(
+        /ADMIN_JWT_EXPIRES_IN/,
+      );
+    });
   });
 
   it('rejects a short JWT_SECRET', () => {

@@ -2,14 +2,21 @@ import express, { type Express } from 'express';
 import { cors, type CorsSettings } from './shared/cors.ts';
 import { errorHandler, notFoundHandler } from './shared/error-handler.ts';
 import { ipRateLimit, type IpRateLimitSettings } from './shared/ip-rate-limit.ts';
-import { healthRoutes } from './modules/health/health.routes.ts';
+import { type DatabaseCheck, healthRoutes } from './modules/health/health.routes.ts';
+import { AdminAuthService } from './modules/admin/admin-auth.service.ts';
+import { AdminStatsService } from './modules/admin/admin-stats.service.ts';
+import { AdminUsersService } from './modules/admin/admin-users.service.ts';
+import type { AdminRepository } from './modules/admin/admin.repository.ts';
+import { adminRoutes } from './modules/admin/admin.routes.ts';
+import { CollectionBrowserService } from './modules/admin/collection-browser.service.ts';
+import type { CollectionRepository } from './modules/admin/collection.repository.ts';
+import { requireAdminToken } from './modules/admin/require-admin-token.ts';
 import { authRoutes } from './modules/auth/auth.routes.ts';
 import { AuthService } from './modules/auth/auth.service.ts';
 import type { OtpSettings } from './modules/auth/auth.types.ts';
 import type { AvatarRepository } from './modules/auth/avatar.repository.ts';
 import type { CodeGenerator, OtpHasher } from './modules/auth/otp-code.ts';
 import type { OtpRepository } from './modules/auth/otp.repository.ts';
-import { requireAdmin } from './modules/auth/require-admin.ts';
 import { requireAuth } from './modules/auth/require-auth.ts';
 import type { SmsSender } from './modules/auth/sms-sender.ts';
 import type { TokenService } from './modules/auth/token.service.ts';
@@ -36,7 +43,6 @@ import { profileRoutes } from './modules/profile/profile.routes.ts';
 import { reportRoutes } from './modules/reports/report.routes.ts';
 import { ReportService } from './modules/reports/report.service.ts';
 import { ProfileService } from './modules/profile/profile.service.ts';
-import { catalogAdminRoutes } from './modules/service-catalog/catalog-admin.routes.ts';
 import { CatalogAdminService } from './modules/service-catalog/catalog-admin.service.ts';
 import type { IntervalDefRepository } from './modules/service-catalog/interval-def.repository.ts';
 import type { ServiceItemDefRepository } from './modules/service-catalog/service-item-def.repository.ts';
@@ -108,6 +114,17 @@ export interface AppDependencies {
   otpSettings: OtpSettings;
   authIpRateLimit: IpRateLimitSettings;
   cors: CorsSettings;
+  /** Pings the database for `GET /health/ready`. */
+  checkDatabase: DatabaseCheck;
+  adminRepository: AdminRepository;
+  /** Admin tokens: ADMIN_JWT_SECRET, `aud: "admin"`. Never accepts a user token. */
+  adminTokenService: TokenService;
+  /** Per-IP limit on `POST /api/admin/auth/login` (always on). */
+  adminLoginRateLimit: IpRateLimitSettings;
+  /** Read-only access to the registered collections (admin browser and stats). */
+  collectionRepository: CollectionRepository;
+  /** One line per admin event: login attempts, user edits, blocks. */
+  adminLog: (line: string) => void;
 }
 
 export function createApp(deps: AppDependencies): Express {
@@ -116,7 +133,7 @@ export function createApp(deps: AppDependencies): Express {
   app.use(express.json());
 
   // Reusable guard for protected routes: router.get('/x', authenticate, handler).
-  const authenticate = requireAuth(deps.tokenService);
+  const authenticate = requireAuth(deps.tokenService, deps.userRepository);
   const authService = new AuthService({
     users: deps.userRepository,
     avatars: deps.avatarRepository,
@@ -129,7 +146,7 @@ export function createApp(deps: AppDependencies): Express {
     settings: deps.otpSettings,
   });
 
-  app.use('/health', healthRoutes());
+  app.use('/health', healthRoutes(deps.checkDatabase));
   app.use(
     '/api/auth',
     authRoutes(authService, {
@@ -171,11 +188,34 @@ export function createApp(deps: AppDependencies): Express {
   });
   app.use('/api/vehicle-catalog', authenticate, vehicleCatalogRoutes(vehicleCatalog));
   app.use('/api/service-items', authenticate, serviceItemRoutes(serviceItems));
+  const adminAuthService = new AdminAuthService({
+    admins: deps.adminRepository,
+    tokens: deps.adminTokenService,
+    now: deps.now,
+    log: deps.adminLog,
+  });
   app.use(
     '/api/admin',
-    authenticate,
-    requireAdmin(deps.userRepository),
-    catalogAdminRoutes(catalogAdminService),
+    adminRoutes({
+      auth: adminAuthService,
+      authenticate: requireAdminToken(deps.adminTokenService, adminAuthService),
+      limitLogin: ipRateLimit(deps.adminLoginRateLimit),
+      catalog: catalogAdminService,
+      vehicleCatalog,
+      users: new AdminUsersService({
+        users: deps.userRepository,
+        collections: deps.collectionRepository,
+        now: deps.now,
+        log: deps.adminLog,
+      }),
+      collections: new CollectionBrowserService(deps.collectionRepository),
+      stats: new AdminStatsService({
+        collections: deps.collectionRepository,
+        users: deps.userRepository,
+        now: deps.now,
+      }),
+      now: deps.now,
+    }),
   );
   const odometerService = new OdometerService({
     readings: deps.odometerReadingRepository,

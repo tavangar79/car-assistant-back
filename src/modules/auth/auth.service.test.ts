@@ -87,6 +87,18 @@ describe('AuthService', () => {
       expect((await service.requestOtp(PHONE)).isRegistered).toBe(true);
     });
 
+    it('rejects a blocked user with 403 before any SMS is sent', async () => {
+      const user = await users.create(PHONE);
+      await users.setBlock(user.id, { blockedAt: now, blockReason: null });
+
+      await expect(service.requestOtp(PHONE)).rejects.toMatchObject({
+        statusCode: 403,
+        details: { code: 'user_blocked' },
+      });
+      expect(sms.sent).toEqual([]);
+      expect(otps.requests).toHaveLength(0);
+    });
+
     it('rejects a resend within the cooldown with retryAfterSeconds', async () => {
       await service.requestOtp(PHONE);
       advance(18);
@@ -216,6 +228,17 @@ describe('AuthService', () => {
 
       expect(result.isNewUser).toBe(false);
       expect(result.user.id).toBe(existing.id);
+    });
+
+    it('rejects a user blocked after the code was sent with 403', async () => {
+      const user = await users.create(PHONE);
+      await service.requestOtp(PHONE);
+      await users.setBlock(user.id, { blockedAt: now, blockReason: 'spam' });
+
+      await expect(service.verifyOtp(PHONE, CODE)).rejects.toMatchObject({
+        statusCode: 403,
+        details: { code: 'user_blocked' },
+      });
     });
 
     it('rejects a wrong code', async () => {

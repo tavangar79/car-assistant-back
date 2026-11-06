@@ -16,8 +16,7 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "catalog:seed": "tsx src/scripts/catalog-seed.ts",
-    "admin:grant": "tsx src/scripts/admin-role.ts grant",
-    "admin:revoke": "tsx src/scripts/admin-role.ts revoke"
+    "admin:setup": "tsx src/scripts/admin-setup.ts"
   },
   "author": "",
   "license": "ISC",
@@ -30,6 +29,7 @@
     "jalaali-js": "^2.0.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.4.0",
+    "qrcode-terminal": "^0.12.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -38,6 +38,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.3.0",
     "@types/node": "^22.20.5",
+    "@types/qrcode-terminal": "^0.12.2",
     "@types/supertest": "^7.2.1",
     "eslint": "^10.12.0",
     "prettier": "^3.9.10",

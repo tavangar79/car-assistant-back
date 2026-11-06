@@ -53,3 +53,13 @@ export class ForbiddenError extends AppError {
     this.name = 'ForbiddenError';
   }
 }
+
+export const USER_BLOCKED_MESSAGE = 'حساب کاربری شما مسدود شده است. با پشتیبانی تماس بگیرید.';
+
+/** 403 for a user an admin has blocked; the client signs out on `details.code === "user_blocked"`. */
+export class UserBlockedError extends AppError {
+  constructor() {
+    super(403, USER_BLOCKED_MESSAGE, { code: 'user_blocked' });
+    this.name = 'UserBlockedError';
+  }
+}

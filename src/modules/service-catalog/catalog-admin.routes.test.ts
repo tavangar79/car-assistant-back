@@ -1,9 +1,9 @@
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../app.ts';
+import { adminFixture } from '../../test/admin-fixture.ts';
 import { InMemoryUserRepository } from '../../test/in-memory-user.repository.ts';
 import { createTestDependencies, TEST_JWT_SECRET } from '../../test/test-dependencies.ts';
-import { ADMIN_ONLY } from '../auth/require-admin.ts';
 import { TokenService } from '../auth/token.service.ts';
 import { GLOBAL_DELETE } from './catalog-admin.service.ts';
 
@@ -51,12 +51,13 @@ describe('/api/admin', () => {
 
   beforeEach(async () => {
     const users = new InMemoryUserRepository();
-    const admin = await users.create('09120000001');
-    await users.setRole(admin.id, 'admin');
     const user = await users.create('09120000002');
-    ADMIN = `Bearer ${tokens.sign(admin.id)}`;
+    const admin = adminFixture();
+    ADMIN = admin.ADMIN;
     USER = `Bearer ${tokens.sign(user.id)}`;
-    app = createApp(createTestDependencies({ userRepository: users }));
+    app = createApp(
+      createTestDependencies({ userRepository: users, adminRepository: admin.adminRepository }),
+    );
   });
 
   const ROUTES = [
@@ -74,10 +75,10 @@ describe('/api/admin', () => {
     await request(app)[method](path).expect(401);
   });
 
-  it.each(ROUTES)('%s %s returns 403 for a normal user', async (method, path) => {
-    const res = await request(app)[method](path).set('Authorization', USER).send({}).expect(403);
+  it.each(ROUTES)('%s %s returns 401 for a user token', async (method, path) => {
+    const res = await request(app)[method](path).set('Authorization', USER).send({}).expect(401);
 
-    expect(res.body).toEqual({ error: { message: ADMIN_ONLY } });
+    expect(res.body).toEqual({ error: { message: 'Unauthorized' } });
   });
 
   describe('service items', () => {

@@ -2,6 +2,7 @@ import {
   NotFoundError,
   TooManyRequestsError,
   UnauthorizedError,
+  UserBlockedError,
   ValidationError,
 } from '../../shared/errors.ts';
 import {
@@ -62,6 +63,8 @@ export class AuthService {
     const windowStart = new Date(now.getTime() - windowMs);
 
     await otps.deleteExpired(now, windowStart);
+    const existing = await users.findByPhone(phone);
+    if (existing?.blockedAt) throw new UserBlockedError(); // Before any SMS is sent.
     await this.ensureMayRequest(phone, now, windowStart);
 
     const code = this.deps.generateCode();
@@ -78,7 +81,7 @@ export class AuthService {
       expiresInSeconds: settings.ttlSeconds,
       resendInSeconds: settings.resendCooldownSeconds,
       codeLength: settings.codeLength,
-      isRegistered: (await users.findByPhone(phone)) !== null,
+      isRegistered: existing !== null,
     };
   }
 
@@ -101,6 +104,8 @@ export class AuthService {
     await otps.clearRequests(phone); // Signed in: a later sign-in must not wait out the old cooldown.
 
     const existing = await users.findByPhone(phone);
+    // Checked after the code: a code sent before the block must not sign the user in.
+    if (existing?.blockedAt) throw new UserBlockedError();
     const user = existing ?? (await users.create(phone));
     return {
       accessToken: tokens.sign(user.id),

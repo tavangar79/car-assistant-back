@@ -30,8 +30,7 @@ by the car-assistant manager repo, whose CTO sends tasks with an API contract.
 | Types / lint      | `npm run typecheck` · `npm run lint`         |
 | Build             | `npm run build`                              |
 | Seed catalog      | `npm run catalog:seed` (adds missing global rows only) |
-| Grant admin       | `npm run admin:grant -- <phone>`             |
-| Revoke admin      | `npm run admin:revoke -- <phone>`            |
+| Admin account     | `npm run admin:setup -- <username>` (replaces every admin; hidden password prompt; prints the TOTP secret + QR) |
 
 **Definition of done:** `npm test && npm run typecheck && npm run lint` all pass.
 

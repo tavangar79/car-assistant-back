@@ -8,7 +8,7 @@ import {
   updateServiceItemDefSchema,
 } from './catalog.types.ts';
 
-/** `/service-items` and `/intervals` of `/api/admin`; mount behind `requireAuth` and `requireAdmin`. */
+/** `/service-items` and `/intervals` of `/api/admin`; mounted by `adminRoutes`, behind the admin token guard. */
 export function catalogAdminRoutes(service: CatalogAdminService): Router {
   const router = Router();
 

@@ -4,6 +4,15 @@ import { ENCRYPTION_KEY_BYTES } from '../lib/file-crypto.ts';
 
 /** The value shipped in `.env.example`. Booting with it would make every JWT forgeable. */
 export const JWT_SECRET_PLACEHOLDER = 'change-me-to-a-random-string-of-32-plus-chars';
+/** The `.env.example` value of ADMIN_JWT_SECRET. */
+export const ADMIN_JWT_SECRET_PLACEHOLDER = 'change-me-to-another-random-string-of-32-plus-chars';
+
+const PLACEHOLDERS = [JWT_SECRET_PLACEHOLDER, ADMIN_JWT_SECRET_PLACEHOLDER];
+
+// A unit is required: jsonwebtoken reads a bare number string as milliseconds.
+const durationSchema = z
+  .string()
+  .regex(/^\d+[smhdwy]$/, 'Use a duration with a unit, like 30d, 12h or 3600s');
 
 function isOrigin(value: string): boolean {
   try {
@@ -53,11 +62,17 @@ const envSchema = z
       .refine((value) => value !== JWT_SECRET_PLACEHOLDER, {
         message: 'JWT_SECRET is still the .env.example placeholder; set a random secret',
       }),
-    JWT_EXPIRES_IN: z
-      .string()
-      // A unit is required: jsonwebtoken reads a bare number string as milliseconds.
-      .regex(/^\d+[smhdwy]$/, 'Use a duration with a unit, like 30d, 12h or 3600s')
-      .default('30d'),
+    JWT_EXPIRES_IN: durationSchema.default('30d'),
+
+    // Signs admin panel tokens (`aud: "admin"`). Must differ from JWT_SECRET, so a user token can never
+    // pass as an admin token. Rotating it signs the admin out (there is no other revocation).
+    ADMIN_JWT_SECRET: z
+      .string({ required_error: 'ADMIN_JWT_SECRET is required; use e.g. `openssl rand -hex 32`' })
+      .min(32, 'ADMIN_JWT_SECRET must be at least 32 characters')
+      .refine((value) => !PLACEHOLDERS.includes(value), {
+        message: 'ADMIN_JWT_SECRET is still the .env.example placeholder; set a random secret',
+      }),
+    ADMIN_JWT_EXPIRES_IN: durationSchema.default('10d'),
 
     // AES-256-GCM key for vehicle document files at rest. Losing it makes every stored file unreadable.
     DOCUMENT_ENCRYPTION_KEY: z
@@ -95,6 +110,9 @@ const envSchema = z
     const fail = (path: keyof typeof env, message: string) =>
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
 
+    if (env.ADMIN_JWT_SECRET === env.JWT_SECRET) {
+      fail('ADMIN_JWT_SECRET', 'ADMIN_JWT_SECRET must differ from JWT_SECRET');
+    }
     if (env.SMS_PROVIDER === 'kavenegar') {
       for (const key of ['KAVENEGAR_API_KEY', 'KAVENEGAR_OTP_TEMPLATE'] as const) {
         if (!env[key]) fail(key, 'Required when SMS_PROVIDER=kavenegar');

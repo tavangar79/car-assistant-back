@@ -301,16 +301,16 @@ describe('/api/auth', () => {
     });
 
     it.each(['000000000000000000000000', 'not-an-object-id'])(
-      'returns 404 for a valid token whose user id %s does not exist',
+      'returns 401 for a valid token whose user id %s does not exist',
       async (id) => {
         const token = new TokenService(TEST_JWT_SECRET, '30d').sign(id);
 
         const res = await request(app)
           .get('/api/auth/me')
           .set('Authorization', `Bearer ${token}`)
-          .expect(404);
+          .expect(401);
 
-        expect(res.body).toEqual({ error: { message: 'User not found' } });
+        expect(res.body).toEqual({ error: { message: 'Unauthorized' } });
       },
     );
   });
@@ -408,16 +408,16 @@ describe('/api/auth', () => {
         .expect(401);
     });
 
-    it('returns 404 for a valid token of a user that does not exist', async () => {
+    it('returns 401 for a valid token of a user that does not exist', async () => {
       const token = new TokenService(TEST_JWT_SECRET, '30d').sign('000000000000000000000000');
 
       const res = await request(app)
         .put('/api/auth/me')
         .set('Authorization', `Bearer ${token}`)
         .send(profile)
-        .expect(404);
+        .expect(401);
 
-      expect(res.body).toEqual({ error: { message: 'User not found' } });
+      expect(res.body).toEqual({ error: { message: 'Unauthorized' } });
     });
   });
   describe('/me/avatar', () => {
@@ -523,12 +523,12 @@ describe('/api/auth', () => {
           .expect(401);
       });
 
-      it('returns 404 for a valid token of a user that does not exist', async () => {
+      it('returns 401 for a valid token of a user that does not exist', async () => {
         token = new TokenService(TEST_JWT_SECRET, '30d').sign('000000000000000000000000');
 
-        const res = await upload(PNG_BYTES).expect(404);
+        const res = await upload(PNG_BYTES).expect(401);
 
-        expect(res.body).toEqual({ error: { message: 'User not found' } });
+        expect(res.body).toEqual({ error: { message: 'Unauthorized' } });
       });
     });
 

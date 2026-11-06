@@ -1,20 +1,25 @@
 import type { RequestHandler, Response } from 'express';
-import { UnauthorizedError } from '../../shared/errors.ts';
+import { UnauthorizedError, UserBlockedError } from '../../shared/errors.ts';
 import type { TokenService } from './token.service.ts';
+import type { UserRepository } from './user.repository.ts';
 
 const BEARER = /^Bearer\s+(\S+)$/i;
+const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
 /**
- * Rejects the request with 401 unless it carries a valid `Authorization: Bearer <jwt>`.
- * Read the caller's id in the handler with `authUserId(res)`.
+ * Rejects the request with 401 unless it carries a valid `Authorization: Bearer <jwt>` of an existing
+ * user, and with 403 (`user_blocked`) when an admin blocked that user. The user is loaded on every
+ * request, so a block takes effect at once. Read the caller's id in the handler with `authUserId(res)`.
  */
-export function requireAuth(tokens: TokenService): RequestHandler {
-  return (req, res, next) => {
+export function requireAuth(tokens: TokenService, users: UserRepository): RequestHandler {
+  return async (req, res, next) => {
     const token = BEARER.exec(req.headers.authorization ?? '')?.[1];
     const userId = token ? tokens.verify(token) : null;
-    if (!userId) throw new UnauthorizedError();
+    const user = userId && OBJECT_ID_PATTERN.test(userId) ? await users.findById(userId) : null;
+    if (!user) throw new UnauthorizedError();
+    if (user.blockedAt) throw new UserBlockedError();
 
-    res.locals.userId = userId;
+    res.locals.userId = user.id;
     next();
   };
 }
